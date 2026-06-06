@@ -205,20 +205,21 @@ class BinanceFetcher:
         return candles
 
     def open_interest(self, symbol="BTCUSDT"):
-        url = f"{self.BASE}/fapi/v1/openInterest?symbol={symbol}"
-        with urlopen(Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=10) as r:
-            return float(json.loads(r.read().decode()).get("openInterest", 0))
+        try:
+            d = self._try_fetch("/fapi/v1/openInterest", {"symbol": symbol})
+            return float(d.get("openInterest", 0))
+        except Exception:
+            return 0.0
 
     def funding_rate(self, symbol="BTCUSDT"):
-        url = f"{self.BASE}/fapi/v1/fundingRate?symbol={symbol}&limit=1"
-        with urlopen(Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=10) as r:
-            data = json.loads(r.read().decode())
-            return float(data[0]["fundingRate"]) if data else 0.0
+        try:
+            d = self._try_fetch("/fapi/v1/fundingRate", {"symbol": symbol, "limit": 1})
+            return float(d[0]["fundingRate"]) if d else 0.0
+        except Exception:
+            return 0.0
 
     def order_book(self, symbol="BTCUSDT", limit=50):
-        url = f"{self.BASE}/api/v3/depth?symbol={symbol}&limit={limit}"
-        with urlopen(Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=10) as r:
-            d = json.loads(r.read().decode())
+        d = self._try_fetch("/api/v3/depth", {"symbol": symbol, "limit": limit})
         bids = [(float(p), float(s)) for p, s in d["bids"]]
         asks = [(float(p), float(s)) for p, s in d["asks"]]
         mp = (bids[0][0] + asks[0][0]) / 2 if bids and asks else 0
