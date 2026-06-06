@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double Bottom Scanner — Backtester v2</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- ═══ TOP HEADER ═══ -->
+        <header class="header">
+            <div class="header-left">
+                <span class="logo">⟐</span>
+                <h1>Double Bottom Scanner</h1>
+                <div class="ticker-selector">
+                    <select id="tickerSelect" class="ticker-select">
+                        <option value="BTCUSDT">BTC/USDT</option>
+                        <option value="ETHUSDT">ETH/USDT</option>
+                        <option value="BNBUSDT">BNB/USDT</option>
+                        <option value="SOLUSDT">SOL/USDT</option>
+                        <option value="XRPUSDT">XRP/USDT</option>
+                        <option value="ADAUSDT">ADA/USDT</option>
+                        <option value="DOGEUSDT">DOGE/USDT</option>
+                        <option value="AVAXUSDT">AVAX/USDT</option>
+                    </select>
+                    <span class="badge" id="timeframeBadge">15m</span>
+                </div>
+                <span class="badge badge-v2">v2</span>
+                <span class="badge badge-v3" id="badgeV3">v3</span>
+                <span class="badge badge-trade-count" id="headerTradeCount">0 trades</span>
+            </div>
+            <div class="header-right">
+                <span class="live-dot"></span>
+                <span class="header-subtitle">Visual Backtester</span>
+                <button id="aiPanelToggle" class="ai-toggle-btn" title="Open AI Analysis Panel">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a4 4 0 0 1 4 4c0 2-2 3-2 5h-4c0-2-2-3-2-5a4 4 0 0 1 4-4z"/>
+                        <path d="M9 15h6v2H9v-2z"/>
+                        <circle cx="12" cy="2" r="0.5" fill="currentColor"/>
+                        <circle cx="12" cy="20" r="2" fill="currentColor" opacity="0.6"/>
+                    </svg>
+                    <span class="ai-toggle-label">AI</span>
+                    <span class="ai-toggle-dot" id="aiToggleDot"></span>
+                </button>
+            </div>
+        </header>
+
+        <div class="layout">
+            <!-- ═══ LEFT SIDEBAR ═══ -->
+            <aside class="sidebar" id="sidebar">
+                <!-- ─── Tab Navigation ─── -->
+                <div class="tab-bar" id="tabBar">
+                    <button class="tab-btn active" data-tab="tab-data">Data</button>
+                    <button class="tab-btn" data-tab="tab-detect">Detection</button>
+                    <button class="tab-btn" data-tab="tab-risk">Risk</button>
+                    <button class="tab-btn" data-tab="tab-scenario">Run</button>
+                    <button class="tab-btn tab-btn-v3" data-tab="tab-v3">V3 ⚡</button>
+                </div>
+
+                <!-- ─── Tab: Data Source ─── -->
+                <div class="tab-panel active" id="tab-data">
+                    <section class="card">
+                        <div class="card-body">
+                            <div class="param-row">
+                                <label>Source</label>
+                                <select id="dataSource">
+                                    <option value="generated">Generated Data</option>
+                                    <option value="binance">Binance — Live Data</option>
+                                    <option value="yahoo">Yahoo Finance</option>
+                                </select>
+                            </div>
+                            <div id="dateRangeGroup" class="hidden">
+                                <div class="param-row">
+                                    <label>Start Date</label>
+                                    <input type="date" id="startDate" value="2025-01-01">
+                                </div>
+                                <div class="param-row">
+                                    <label>End Date</label>
+                                    <input type="date" id="endDate">
+                                </div>
+                                <div class="param-row">
+                                    <label>Limit (bars)</label>
+                                    <input type="number" id="barLimit" value="500" min="50" max="1000">
+                                </div>
+                                <button id="fetchBtn" class="btn-secondary">⟳ Fetch from API</button>
+                                <button id="scanLiveBtn" class="btn-primary btn-scan-live">⟐ Scan Live Now</button>
+                                <div id="scanLiveStatus" class="fetch-status hidden"></div>
+                                <div id="fetchStatus" class="fetch-status hidden"></div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="card">
+                        <div class="card-body">
+                            <div class="param-row">
+                                <label>Initial Balance</label>
+                                <input type="number" id="initialBalance" value="2000" min="100" step="100">
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ─── Tab: V3 Engine Controls ─── -->
+                <div class="tab-panel" id="tab-v3">
+                    <section class="card">
+                        <div class="card-header">V3 4-Layer Engine</div>
+                        <div class="card-body">
+                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;line-height:1.6;">
+                                <strong style="color:var(--accent-blue);">L1</strong> Multi-Exchange Data ·
+                                <strong style="color:var(--accent-green);">L2</strong> ATR Sweeps · Spoof Filter · Zones<br>
+                                <strong style="color:var(--accent-orange);">L3</strong> 5-Input Scorer (HTF+VP+OI+Funding+History)<br>
+                                <strong style="color:var(--accent-red);">L4</strong> Entry Gate · CVD Divergence · Volume Confirmation
+                            </div>
+                            <div class="param-row">
+                                <label>Engine Mode</label>
+                                <select id="v3Mode">
+                                    <option value="backtest">Backtest (full candle data)</option>
+                                    <option value="fetch-run">Fetch Binance + Run</option>
+                                    <option value="validate">Walk-Forward Validation</option>
+                                </select>
+                            </div>
+                            <div class="param-row">
+                                <label>Data</label>
+                                <select id="v3DataSource">
+                                    <option value="generated">Use Loaded Candle Data</option>
+                                    <option value="binance">Fetch from Binance Live</option>
+                                </select>
+                            </div>
+                            <button id="runV3Btn" class="btn-primary" style="margin-top:10px;">
+                                <span class="run-icon">⚡</span>
+                                <span class="run-text">Run V3 Engine</span>
+                            </button>
+                            <div id="v3Status" class="fetch-status hidden" style="margin-top:8px;"></div>
+                        </div>
+                    </section>
+
+                    <section class="card" id="v3ZoneListCard" style="display:none;">
+                        <div class="card-header">Active Zones <span id="v3ZoneCount" style="color:var(--text-muted);font-weight:400;"></span></div>
+                        <div class="card-body" id="v3ZoneBody" style="max-height:200px;overflow-y:auto;padding:8px 10px;"></div>
+                    </section>
+
+                    <section class="card" id="v3ValidationCard" style="display:none;">
+                        <div class="card-header">Walk-Forward Validation</div>
+                        <div class="card-body" id="v3ValidationBody" style="font-size:11px;padding:10px 12px;"></div>
+                    </section>
+                </div>
+
+                <!-- ─── Tab: Pattern Detection ─── -->
+                <div class="tab-panel" id="tab-detect">
+                    <section class="card">
+                        <div class="card-body">
+                            <div class="slider-row">
+                                <label>Swing Length</label>
+                                <div class="slider-control">
+                                    <input type="range" id="swingLength" min="2" max="15" value="5" step="1">
+                                    <span class="slider-val" id="swingLengthVal">5</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>ATR Length</label>
+                                <div class="slider-control">
+                                    <input type="range" id="atrLength" min="5" max="30" value="14" step="1">
+                                    <span class="slider-val" id="atrLengthVal">14</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Max Bottom Diff (%)</label>
+                                <div class="slider-control">
+                                    <input type="range" id="maxBottomDiff" min="0.05" max="0.50" value="0.27" step="0.01">
+                                    <span class="slider-val" id="maxBottomDiffVal">0.27%</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Min Candles Between</label>
+                                <div class="slider-control">
+                                    <input type="range" id="minCandlesBetween" min="1" max="10" value="2" step="1">
+                                    <span class="slider-val" id="minCandlesBetweenVal">2</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Max Candles Between</label>
+                                <div class="slider-control">
+                                    <input type="range" id="maxCandlesBetween" min="5" max="60" value="25" step="1">
+                                    <span class="slider-val" id="maxCandlesBetweenVal">25</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Min Height × ATR</label>
+                                <div class="slider-control">
+                                    <input type="range" id="minPatternHeightMult" min="0.1" max="3.0" value="0.5" step="0.1">
+                                    <span class="slider-val" id="minPatternHeightMultVal">0.5×</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ─── Tab: Risk Management ─── -->
+                <div class="tab-panel" id="tab-risk">
+                    <section class="card">
+                        <div class="card-body">
+                            <div class="slider-row">
+                                <label>Risk Per Trade (%)</label>
+                                <div class="slider-control">
+                                    <input type="range" id="riskPerTrade" min="0.1" max="10.0" value="2.0" step="0.1">
+                                    <span class="slider-val" id="riskPerTradeVal">2.0%</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>SL Multiplier (× ATR)</label>
+                                <div class="slider-control">
+                                    <input type="range" id="slMultiplier" min="0.5" max="5.0" value="1.5" step="0.1">
+                                    <span class="slider-val" id="slMultiplierVal">1.5×</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Min RR</label>
+                                <div class="slider-control">
+                                    <input type="range" id="minRR" min="0.5" max="5.0" value="1.5" step="0.1">
+                                    <span class="slider-val" id="minRRVal">1.5</span>
+                                </div>
+                            </div>
+                            <div class="slider-row">
+                                <label>Daily Loss Limit (%)</label>
+                                <div class="slider-control">
+                                    <input type="range" id="dailyLossLimit" min="1.0" max="20.0" value="5.0" step="0.5">
+                                    <span class="slider-val" id="dailyLossLimitVal">5.0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ─── Tab: Scenario & Run ─── -->
+                <div class="tab-panel active" id="tab-scenario">
+                    <section class="card">
+                        <div class="card-body">
+                            <section class="card" style="margin-top: 10px;">
+                                <div class="card-header">Trend Filter</div>
+                                <div class="card-body">
+                                    <div class="param-row">
+                                        <label>200-MA Filter</label>
+                                        <label class="toggle-wrap">
+                                            <input type="checkbox" id="useTrendFilter" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="slider-row">
+                                        <label>MA Period</label>
+                                        <div class="slider-control">
+                                            <input type="range" id="trendMAPeriod" min="50" max="400" value="200" step="10">
+                                            <span class="slider-val" id="trendMAPeriodVal">200</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="card" style="margin-top: 10px;">
+                                <div class="card-header">Volume Confirmation</div>
+                                <div class="card-body">
+                                    <div class="param-row">
+                                        <label>Volume Check</label>
+                                        <label class="toggle-wrap">
+                                            <input type="checkbox" id="useVolumeConfirm" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="slider-row">
+                                        <label>B2 Vol <span style="color:var(--text-muted);font-size:10px;">(× B1)</span></label>
+                                        <div class="slider-control">
+                                            <input type="range" id="volumeConfirmThreshold" min="0.3" max="1.0" value="0.80" step="0.05">
+                                            <span class="slider-val" id="volumeConfirmThresholdVal">0.80</span>
+                                        </div>
+                                    </div>
+                                    <div class="slider-row">
+                                        <label>Breakout Vol <span style="color:var(--text-muted);font-size:10px;">(× avg)</span></label>
+                                        <div class="slider-control">
+                                            <input type="range" id="breakoutVolumeMult" min="1.0" max="3.0" value="1.5" step="0.1">
+                                            <span class="slider-val" id="breakoutVolumeMultVal">1.5×</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="card" style="margin-top: 10px;">
+                                <div class="card-header">RR Architecture</div>
+                                <div class="card-body">
+                                    <div class="slider-row">
+                                        <label>TP1 Target (× R)</label>
+                                        <div class="slider-control">
+                                            <input type="range" id="target1RR" min="1.0" max="3.0" value="1.5" step="0.1">
+                                            <span class="slider-val" id="target1RRVal">1.5</span>
+                                        </div>
+                                    </div>
+                                    <div class="slider-row">
+                                        <label>Partial Exit %</label>
+                                        <div class="slider-control">
+                                            <input type="range" id="partialExitRatio" min="0.3" max="0.9" value="0.60" step="0.05">
+                                            <span class="slider-val" id="partialExitRatioVal">60%</span>
+                                        </div>
+                                    </div>
+                                    <div class="slider-row">
+                                        <label>Trailing Stop (× ATR)</label>
+                                        <div class="slider-control">
+                                            <input type="range" id="trailingStopMult" min="0.2" max="2.0" value="0.5" step="0.1">
+                                            <span class="slider-val" id="trailingStopMultVal">0.5×</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="slider-row" id="patternCountRow">
+                                <label>Patterns to Inject</label>
+                                <div class="slider-control">
+                                    <input type="range" id="patternCount" min="10" max="100" value="100" step="10">
+                                    <span class="slider-val" id="patternCountVal">100</span>
+                                </div>
+                            </div>
+
+                            <div class="param-row">
+                                <label>Scenario</label>
+                                <select id="scenarioSelect">
+                                    <option value="all">All Patterns (Full Run)</option>
+                                    <option value="100_patterns">100 Patterns — Historic Run</option>
+                                    <option value="scenario_1">P1 — Tight diff (0.02%)</option>
+                                    <option value="scenario_2">P2 — Tight diff (0.03%)</option>
+                                    <option value="scenario_3">P3 — Tight diff (0.03%)</option>
+                                    <option value="scenario_4">P4 — Tight diff (0.04%)</option>
+                                    <option value="scenario_5">P5 — Tight diff (0.05%)</option>
+                                    <option value="scenario_6">P6 — Avg diff (0.06%)</option>
+                                    <option value="scenario_7">P7 — Avg diff (0.07%)</option>
+                                    <option value="scenario_8">P8 — Avg diff (0.08%)</option>
+                                    <option value="scenario_9">P9 — Wide diff (0.10%)</option>
+                                    <option value="scenario_10">P10 — Max diff FAKEOUT (0.27%)</option>
+                                </select>
+                            </div>
+
+                            <div class="scenario-info" id="scenarioInfo">
+                                <div class="info-row"><span class="info-label">Bottom diff:</span><span class="info-value" id="infoDiff">—</span></div>
+                                <div class="info-row"><span class="info-label">Candles between:</span><span class="info-value" id="infoGap">—</span></div>
+                                <div class="info-row"><span class="info-label">Pattern height:</span><span class="info-value" id="infoHeight">—</span></div>
+                                <div class="info-row"><span class="info-label">Expected move:</span><span class="info-value" id="infoMove">—</span></div>
+                                <div class="info-row"><span class="info-label">Outcome:</span><span class="info-value" id="infoOutcome">—</span></div>
+                            </div>
+
+                            <details class="checklist-details">
+                                <summary class="checklist-summary">Pre-Trade Checklist</summary>
+                                <div class="checklist" id="checklist">
+                                    <label><input type="checkbox" disabled> BUY label visible</label>
+                                    <label><input type="checkbox" disabled> Bottoms within limit</label>
+                                    <label><input type="checkbox" disabled> Candles 2–25</label>
+                                    <label><input type="checkbox" disabled> Height ≥ min × ATR</label>
+                                    <label><input type="checkbox" disabled> RR ≥ minimum</label>
+                                    <label><input type="checkbox" disabled> SL placed</label>
+                                    <label><input type="checkbox" disabled> Position sized</label>
+                                    <label><input type="checkbox" disabled> TP placed</label>
+                                    <label><input type="checkbox" disabled> No news block</label>
+                                </div>
+                            </details>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ═══ RUN BUTTON — always visible at bottom ═══ -->
+                <div class="run-bar" id="runBar">
+                    <button id="runBtn" class="btn-primary btn-run">
+                        <span class="run-icon">▶</span>
+                        <span class="run-text">Run Backtest</span>
+                    </button>
+                    <div id="progressWrap" class="hidden progress-inline">
+                        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                        <span id="progressLabel">0%</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- ═══ RIGHT CONTENT ═══ -->
+            <main class="content">
+                <!-- ─── Metrics Bar ─── -->
+                <section class="metrics">
+                    <div class="metric">
+                        <span class="metric-label">Win Rate</span>
+                        <span class="metric-value" id="winRate">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Total Return</span>
+                        <span class="metric-value" id="totalReturn">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Max Drawdown</span>
+                        <span class="metric-value" id="maxDrawdown">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Profit Factor</span>
+                        <span class="metric-value" id="profitFactor">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Total Trades</span>
+                        <span class="metric-value" id="tradeCount">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Expectancy</span>
+                        <span class="metric-value" id="expectancy">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Sharpe</span>
+                        <span class="metric-value" id="sharpe" style="font-size:17px;">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Sortino</span>
+                        <span class="metric-value" id="sortino" style="font-size:17px;">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Avg RR</span>
+                        <span class="metric-value" id="avgRR" style="font-size:17px;">—</span>
+                    </div>
+                </section>
+
+                <!-- ─── Charts ─── -->
+                <section class="charts-grid">
+                    <div class="chart-card chart-card-main">
+                        <div class="chart-header">
+                            <span id="chartTitle">BTC/USDT — 15m</span>
+                            <div class="legend">
+                                <span class="legend-entry"><span class="dot dot-db"></span>DB</span>
+                                <span class="legend-entry"><span class="dot dot-buy"></span>BUY</span>
+                                <span class="legend-entry"><span class="dot dot-nl"></span>Neckline</span>
+                                <span class="legend-entry"><span class="dot dot-tp"></span>Target</span>
+                                <span class="legend-entry"><span class="dot dot-zone"></span>Zone</span>
+                                <span class="legend-entry"><span class="dot dot-cvd"></span>CVD</span>
+                            </div>
+                        </div>
+                        <div id="priceChart" class="chart-container"></div>
+                    </div>
+                    <div class="charts-subgrid">
+                        <div class="chart-card chart-card-small">
+                            <div class="chart-header">
+                                <span>Equity Curve</span>
+                                <span class="equity-balance" id="finalBalance"></span>
+                            </div>
+                            <div id="equityChart" class="chart-container chart-container-small"></div>
+                        </div>
+                        <div class="chart-card chart-card-small" id="v3CvdCard" style="display:none;">
+                            <div class="chart-header">
+                                <span>CVD Divergence</span>
+                                <span class="cvd-signal" id="cvdSignal" style="font-size:10px;color:var(--text-muted);"></span>
+                            </div>
+                            <div id="cvdChart" class="chart-container chart-container-small"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ─── V3 Scoring Breakdown ─── -->
+                <section class="card" id="v3ScoringCard" style="display:none;">
+                    <div class="card-header">V3 Zone Scoring Breakdown</div>
+                    <div class="card-body" id="v3ScoringBody">
+                        <div class="scoring-grid" id="scoringGrid"></div>
+                        <div class="scoring-summary" id="scoringSummary"></div>
+                    </div>
+                </section>
+
+                <!-- ─── Trade Log ─── -->
+                <section class="card trade-log">
+                    <div class="card-header">Trade Log <span class="trade-count" id="tradeCountLabel"></span></div>
+                    <div class="table-wrap" id="tradeTableWrap">
+                        <table id="tradeTable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Pattern</th>
+                                    <th>Entry Time</th>
+                                    <th>Entry</th>
+                                    <th>SL</th>
+                                    <th>TP1</th>
+                                    <th>TP2</th>
+                                    <th>Exit Price</th>
+                                    <th>Result</th>
+                                    <th>P&amp;L ($)</th>
+                                    <th>P&amp;L (%)</th>
+                                    <th>RR</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tradeBody">
+                                <tr><td colspan="12" class="empty-state">Adjust parameters &amp; run a backtest</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ─── Liquidity9 Panel ─── -->
+                <section class="card liquidity9-panel" id="liquidity9Panel" style="display:none;">
+                    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                        <span>🔵 Liquidity9 — Zone Map</span>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button id="scanLiquidityBtn" class="btn-liquidity-scan">⟳ Scan Zones</button>
+                            <span class="liquidity-status" id="liquidityStatus"></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="liquidity-summary" id="liquiditySummary">
+                            <div class="liq-stat">
+                                <span class="liq-stat-label">Support</span>
+                                <span class="liq-stat-value liq-support-color" id="liqSupportCount">0</span>
+                            </div>
+                            <div class="liq-stat">
+                                <span class="liq-stat-label">Resistance</span>
+                                <span class="liq-stat-value liq-resistance-color" id="liqResistanceCount">0</span>
+                            </div>
+                            <div class="liq-stat">
+                                <span class="liq-stat-label">Walls</span>
+                                <span class="liq-stat-value" id="liqWallCount" style="color:var(--accent-orange);">0</span>
+                            </div>
+                            <div class="liq-stat">
+                                <span class="liq-stat-label">Imbalance</span>
+                                <span class="liq-stat-value" id="liqImbalance">0.00</span>
+                            </div>
+                            <div class="liq-stat">
+                                <span class="liq-stat-label">Current Price</span>
+                                <span class="liq-stat-value" id="liqCurrentPrice" style="font-size:16px;">$—</span>
+                            </div>
+                        </div>
+                        <div class="liquidity-zone-list" id="liquidityZoneList">
+                            <div class="zone-list-column zone-support-column">
+                                <div class="zone-list-header support-header">🟢 Support Zones</div>
+                                <div class="zone-list-body" id="supportZoneList"></div>
+                            </div>
+                            <div class="zone-list-column zone-resistance-column">
+                                <div class="zone-list-header resistance-header">🔴 Resistance Zones</div>
+                                <div class="zone-list-body" id="resistanceZoneList"></div>
+                            </div>
+                        </div>
+                        <div class="liquidity-legend">
+                            <span class="legend-item"><span class="liq-dot liq-dot-support"></span> Support</span>
+                            <span class="legend-item"><span class="liq-dot liq-dot-resistance"></span> Resistance</span>
+                            <span class="legend-item"><span class="liq-dot liq-dot-wall"></span> Order Wall</span>
+                            <span class="legend-item"><span class="liq-dot liq-dot-sweep"></span> Sweep</span>
+                            <span class="legend-item"><span class="liq-dot liq-dot-fvg"></span> FVG</span>
+                            <span class="legend-item"><span class="liq-dot liq-dot-ob"></span> Order Block</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ─── Floating Run Backtest Button ─── -->
+                <button id="runBtnMain" class="btn-float-main">
+                    <span class="run-icon">▶</span>
+                    <span class="run-text">Run Backtest</span>
+                </button>
+
+                <!-- ─── Floating AI Analysis Button ─── -->
+                <button id="aiFabBtn" class="btn-float-ai" title="AI Self-Analysis">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a4 4 0 0 1 4 4c0 2-2 3-2 5h-4c0-2-2-3-2-5a4 4 0 0 1 4-4z"/>
+                        <path d="M9 15h6v2H9v-2z"/>
+                        <circle cx="12" cy="20" r="2" fill="currentColor" opacity="0.6"/>
+                    </svg>
+                    <span class="fab-ai-text">Analyze</span>
+                </button>
+
+                <!-- ═══ AI ANALYSIS SLIDING PANEL ═══ -->
+                <div class="ai-slide-panel" id="aiSlidePanel">
+                    <div class="ai-panel-header">
+                        <div class="ai-panel-title-row">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a4 4 0 0 1 4 4c0 2-2 3-2 5h-4c0-2-2-3-2-5a4 4 0 0 1 4-4z"/>
+                                <path d="M9 15h6v2H9v-2z"/>
+                                <circle cx="12" cy="20" r="2" fill="currentColor" opacity="0.6"/>
+                            </svg>
+                            <span class="ai-panel-title">AI Self-Analysis</span>
+                            <span class="ai-panel-badge" id="aiPanelBadge">—</span>
+                        </div>
+                        <div class="ai-panel-actions">
+                            <div class="ai-mode-selector">
+                                <button class="ai-mode-btn active" data-mode="best">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                    DB Best
+                                </button>
+                                <button class="ai-mode-btn" data-mode="pluto">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                                    Pluto
+                                </button>
+                            </div>
+                            <button class="ai-panel-close" id="aiPanelClose">✕</button>
+                        </div>
+                    </div>
+
+                    <div class="ai-tab-bar">
+                        <button class="ai-tab active" data-ai-tab="ai-tab-overview">Overview</button>
+                        <button class="ai-tab" data-ai-tab="ai-tab-patterns" id="aiPatTab">Patterns</button>
+                        <button class="ai-tab" data-ai-tab="ai-tab-boardroom" id="aiBrdTab" style="display:none">Boardroom</button>
+                        <button class="ai-tab" data-ai-tab="ai-tab-signals">Signals</button>
+                        <button class="ai-tab" data-ai-tab="ai-tab-history">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            History
+                        </button>
+                    </div>
+
+                    <div class="ai-panel-body" id="aiPanelBody">
+                        <!-- OVERVIEW TAB -->
+                        <div class="ai-tab-content active" id="ai-tab-overview">
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📊 Market Status</span>
+                                    <span class="ai-exchange-badges" id="aiExchangeBadges"></span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">Symbol</span>
+                                    <span class="ai-value" id="aiSymbol">BTC/USDT</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">Price (Aggregated)</span>
+                                    <span class="ai-value ai-price" id="aiPrice">—</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">Trend</span>
+                                    <span class="ai-value" id="aiTrend">—</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">ATR (14)</span>
+                                    <span class="ai-value" id="aiATR">—</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">MA20 / MA50</span>
+                                    <span class="ai-value" id="aiMA">— / —</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">Data Range</span>
+                                    <span class="ai-value ai-date" id="aiDateRange">—</span>
+                                </div>
+                                <div class="ai-card-row">
+                                    <span class="ai-label">Sources</span>
+                                    <span class="ai-value" id="aiSource">Binance</span>
+                                </div>
+                            </div>
+
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>🎯 Pattern Confidence</span>
+                                    <span class="ai-confidence-score" id="aiConfidenceScore">—</span>
+                                </div>
+                                <div class="ai-confidence-bar-track">
+                                    <div class="ai-confidence-bar-fill" id="aiConfidenceFill"></div>
+                                </div>
+                                <div class="ai-confidence-labels">
+                                    <span class="ai-conf-label">Low</span>
+                                    <span class="ai-conf-label">Med</span>
+                                    <span class="ai-conf-label">High</span>
+                                </div>
+                            </div>
+
+                            <div class="ai-stats-row">
+                                <div class="ai-stat-card">
+                                    <span class="ai-stat-val" id="aiPatternsFound">0</span>
+                                    <span class="ai-stat-label">Patterns</span>
+                                </div>
+                                <div class="ai-stat-card">
+                                    <span class="ai-stat-val" id="aiTradesSim">0</span>
+                                    <span class="ai-stat-label">Sim Trades</span>
+                                </div>
+                                <div class="ai-stat-card">
+                                    <span class="ai-stat-val" id="aiWinRate">—</span>
+                                    <span class="ai-stat-label">Win Rate</span>
+                                </div>
+                                <div class="ai-stat-card">
+                                    <span class="ai-stat-val" id="aiProfitFactor">—</span>
+                                    <span class="ai-stat-label">PF</span>
+                                </div>
+                            </div>
+
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📉 Recent Swing Lows</span>
+                                    <span class="ai-swing-count" id="aiSwingCount">0</span>
+                                </div>
+                                <div class="ai-swing-list" id="aiSwingList">
+                                    <div class="ai-empty">Run analysis to see swing lows</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- PATTERNS TAB -->
+                        <div class="ai-tab-content" id="ai-tab-patterns">
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📊 Pattern Summary</span>
+                                    <span id="aiPatternTotal">0 total</span>
+                                </div>
+                                <div class="ai-pattern-summary-row">
+                                    <div class="ai-pattern-stat">
+                                        <span class="ai-ps-val" id="aiCompletedPat">0</span>
+                                        <span class="ai-ps-label">Completed</span>
+                                    </div>
+                                    <div class="ai-pattern-stat">
+                                        <span class="ai-ps-val" id="aiPendingPat">0</span>
+                                        <span class="ai-ps-label">Pending</span>
+                                    </div>
+                                    <div class="ai-pattern-stat">
+                                        <span class="ai-ps-val" id="aiAvgRR">—</span>
+                                        <span class="ai-ps-label">Avg RR</span>
+                                    </div>
+                                    <div class="ai-pattern-stat">
+                                        <span class="ai-ps-val" id="aiReturn">—</span>
+                                        <span class="ai-ps-label">Return</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📋 Detected Patterns</span>
+                                    <span class="ai-pat-count" id="aiPatCount">0</span>
+                                </div>
+                                <div class="ai-pattern-list" id="aiPatternList">
+                                    <div class="ai-empty">No patterns detected yet</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BOARDROOM TAB -->
+                        <div class="ai-tab-content" id="ai-tab-boardroom">
+                            <div class="brd-verdict-banner" id="brdVerdictBanner">
+                                <div class="brd-verdict-icon" id="brdVerdictIcon">⏳</div>
+                                <div class="brd-verdict-info">
+                                    <span class="brd-verdict-label" id="brdVerdictLabel">WAIT</span>
+                                    <span class="brd-verdict-conf" id="brdVerdictConf">Confidence: —</span>
+                                </div>
+                            </div>
+
+                            <div class="brd-agent-grid" id="brdAgentGrid"></div>
+
+                            <div class="brd-exec-card" id="brdExecCard" style="display:none">
+                                <div class="ai-card-header">
+                                    <span>🎯 Recommended Execution</span>
+                                </div>
+                                <div class="brd-exec-row">
+                                    <div class="brd-exec-item">
+                                        <span class="brd-exec-label">Entry Zone</span>
+                                        <span class="brd-exec-val" id="brdEntryZone">—</span>
+                                    </div>
+                                    <div class="brd-exec-item">
+                                        <span class="brd-exec-label">TP1 / TP2</span>
+                                        <span class="brd-exec-val" id="brdTargets">—</span>
+                                    </div>
+                                    <div class="brd-exec-item">
+                                        <span class="brd-exec-label">Stop Loss</span>
+                                        <span class="brd-exec-val" id="brdStopLoss">—</span>
+                                    </div>
+                                    <div class="brd-exec-item">
+                                        <span class="brd-exec-label">Risk/Reward</span>
+                                        <span class="brd-exec-val" id="brdRR">—</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="brd-mtfa-card" id="brdMTFACard" style="display:none">
+                                <div class="ai-card-header">
+                                    <span>⏰ Multi-Timeframe Analysis</span>
+                                </div>
+                                <div class="brd-mtfa-grid" id="brdMTFAGrid"></div>
+                            </div>
+
+                            <div class="brd-heatmap-card" id="brdHeatmapCard" style="display:none">
+                                <div class="ai-card-header">
+                                    <span>🔥 Liquidity Heatmap</span>
+                                </div>
+                                <div class="brd-heatmap-bars" id="brdHeatmapBars"></div>
+                            </div>
+                        </div>
+
+                        <!-- SIGNALS TAB -->
+                        <div class="ai-tab-content" id="ai-tab-signals">
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>🔔 Active Signals</span>
+                                    <span class="ai-sig-count" id="aiSigCount">0</span>
+                                </div>
+                                <div class="ai-signal-list" id="aiSignalList">
+                                    <div class="ai-empty">Run analysis to see signals</div>
+                                </div>
+                            </div>
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📜 Recent Trades</span>
+                                    <span class="ai-trade-sim-count" id="aiTradeSimCount">0</span>
+                                </div>
+                                <div class="ai-trade-list" id="aiTradeList">
+                                    <div class="ai-empty">No simulated trades yet</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- HISTORY TAB -->
+                        <div class="ai-tab-content" id="ai-tab-history">
+                            <div class="ai-card">
+                                <div class="ai-card-header">
+                                    <span>📋 Analysis History</span>
+                                    <div style="display:flex;gap:6px;align-items:center;">
+                                        <span class="ai-hist-count" id="aiHistCount">0</span>
+                                        <button id="aiHistClearBtn" class="ai-hist-clear-btn" title="Clear all history">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="ai-hist-bar">
+                                    <button id="aiHistCompareBtn" class="ai-hist-compare-btn" disabled>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M8 3H3v5M3 16v5h5M21 16v5h-5"/></svg>
+                                        Compare Selected
+                                    </button>
+                                    <span class="ai-hist-hint" id="aiHistHint">Select 2 entries to compare</span>
+                                </div>
+                                <div class="ai-hist-list" id="aiHistList">
+                                    <div class="ai-empty">No saved analyses yet</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- COMPARE OVERLAY -->
+                        <div class="ai-compare-overlay" id="aiCompareOverlay">
+                            <div class="ai-compare-panel">
+                                <div class="ai-compare-header">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M8 3H3v5M3 16v5h5M21 16v5h-5"/></svg>
+                                    <span>Compare Analyses</span>
+                                    <button id="aiCompareClose" class="ai-compare-close">✕</button>
+                                </div>
+                                <div class="ai-compare-body" id="aiCompareBody">
+                                    <div class="ai-compare-error">Loading...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="ai-panel-footer">
+                            <span class="ai-timestamp" id="aiTimestamp">Last scan: —</span>
+                            <button id="aiScanBtn" class="ai-scan-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"/>
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                                </svg>
+                                Scan & Analyze
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overlay -->
+                <div class="ai-overlay" id="aiOverlay"></div>
+
+                <!-- ─── Data Info ─── -->
+                <section class="card data-info hidden" id="dataInfoCard">
+                    <div class="card-header">Fetched Data</div>
+                    <div class="card-body" id="dataInfoBody"></div>
+                </section>
+            </main>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

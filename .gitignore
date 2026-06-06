@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+server.log
+flask_log*.txt
+
+# Cache / Data
+scan_data.json
+_ul*
+__pycache__/
+
+# Test files
+test_*.py
+_test_*
+_test.txt
+
+# Result files
+btc_*.json
+fresh_*.json
+liq_backtest_results.json
+backtest_output.txt
+backtest_report.txt
+inst_bt_exit.txt
+inst_bt_stderr.txt
+inst_bt_stdout.txt
+
+# Backups and temp
+*.bak
+test_log.txt
+
+# Generated scripts
+__gen.py
+_gen.py
+inst_bt_run.py
+inst_backtest.py
+
+# Generated PDF/PNG reports
+*.pdf
+report_charts/
+liq_charts/
+
+# TradingView scripts (not needed for deploy)
+*.pine
+
+# Other config
+run_backbat.bat
+stop_backbat.bat

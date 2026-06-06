@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>Liquidity Identifier — S&amp;R Zones</title>
+    <link rel="stylesheet" href="liq_styles.css">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="4"/>
+                        <path d="M8 12h8M12 8v8"/>
+                        <circle cx="12" cy="12" r="3" opacity="0.4"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Liquidity Identifier</h1>
+                    <span class="header-sub">Market Structure Scanner</span>
+                </div>
+                <span class="live-badge" id="headerStatus">Live</span>
+            </div>
+            <div class="header-right">
+                <button id="themeToggle" class="theme-toggle-btn" title="Toggle light/dark mode" aria-label="Toggle dark mode" aria-pressed="false" onclick="toggleTheme()">
+                    <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    <svg class="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <div class="controls">
+                    <select id="symbolSelect">
+                        <option value="BTCUSDT">BTC/USDT</option>
+                        <option value="ETHUSDT">ETH/USDT</option>
+                        <option value="BNBUSDT">BNB/USDT</option>
+                        <option value="SOLUSDT">SOL/USDT</option>
+                        <option value="XRPUSDT">XRP/USDT</option>
+                        <option value="ADAUSDT">ADA/USDT</option>
+                        <option value="DOGEUSDT">DOGE/USDT</option>
+                        <option value="AVAXUSDT">AVAX/USDT</option>
+                    </select>
+                    <select id="intervalSelect">
+                        <option value="5m">5m</option>
+                        <option value="15m" selected>15m</option>
+                        <option value="1h">1h</option>
+                        <option value="4h">4h</option>
+                    </select>
+                    <button id="scanBtn" class="btn-primary">Scan Now</button>
+                    <button id="refreshBtn" class="btn-refresh" title="Force refresh (R)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
+                    </button>
+                    <div class="auto-refresh-group">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <select id="autoRefreshSelect">
+                            <option value="0">Off</option>
+                            <option value="10">10s</option>
+                            <option value="30" selected>30s</option>
+                            <option value="60">60s</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="price-box">
+                    <span class="price" id="priceValue">--</span>
+                    <span class="price-label" id="priceLabel">BTC</span>
+                </div>
+            </div>
+        </header>
+        <div class="layout">
+            <aside class="sidebar">
+                <div class="section">
+                    <div class="section-title">Market Summary</div>
+                    <div class="summary-grid">
+                        <div class="s-item"><span>Bid Liq</span><span id="bidLiquidity">--</span></div>
+                        <div class="s-item"><span>Ask Liq</span><span id="askLiquidity">--</span></div>
+                        <div class="s-item"><span>Ratio</span><span id="bidAskRatio">--</span></div>
+                        <div class="s-item"><span>Imbalance</span><span id="imbalance">--</span></div>
+                        <div class="s-item"><span>Walls</span><span id="activeWalls">0</span></div>
+                        <div class="s-item"><span>Zones</span><span id="totalZones">0</span></div>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-title">
+                        <span>Liquidity Zones</span>
+                        <div class="zone-filters">
+                            <button class="zf active" data-f="all">All</button>
+                            <button class="zf" data-f="support">Sup</button>
+                            <button class="zf" data-f="resistance">Res</button>
+                        </div>
+                    </div>
+                    <div class="zone-list" id="zoneList"><div class="empty">Scan to detect zones</div></div>
+                </div>
+                <div class="section">
+                    <div class="section-title">
+                        <span>Structure</span>
+                        <span id="structureTag" style="font-size:10px;font-weight:700;color:var(--text-muted)">—</span>
+                    </div>
+                    <div class="legend">
+                        <span><span class="dot" style="background:#22d3ee"></span>Order Block</span>
+                        <span><span class="dot" style="background:#8b5cf6"></span>FVG</span>
+                        <span><span class="dot" style="background:#f59e0b"></span>Sweep</span>
+                        <span><span class="dot" style="background:#06b6d4"></span>Wall</span>
+                        <span><span class="dot" style="background:#10b981"></span>HVN</span>
+                    </div>
+                </div>
+                <div class="sidebar-footer">
+                    <div class="update-time" id="updateTime">Last scan: --</div>
+                <div class="cache-indicator" id="cacheIndicator">
+                    <span class="ci-dot" id="cacheDot"></span>
+                    <span id="cacheLabel">Live</span>
+                </div>
+                </div>
+            </aside>
+            <main class="content">
+                <div class="metrics-bar">
+                    <div class="mc mc-bid"><div class="ml">Support Zones</div><div class="mv" id="supportCount">0</div></div>
+                    <div class="mc mc-ask"><div class="ml">Resistance</div><div class="mv" id="resistanceCount">0</div></div>
+                    <div class="mc mc-imb"><div class="ml">Imbalance</div><div class="mv" id="imbalanceMetric">0%</div></div>
+                    <div class="mc mc-wall"><div class="ml">Walls</div><div class="mv" id="wallsMetric">0</div></div>
+                    <div class="mc mc-tier"><div class="ml">Top Tier</div><div class="mv" id="tierZones">0</div></div>
+                </div>
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="liquidity9">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="4"/>
+                            <path d="M8 12h8M12 8v8"/>
+                            <circle cx="12" cy="12" r="3" opacity="0.4"/>
+                        </svg>
+                        Liquidity9
+                    </button>
+                    <button class="tab-btn" data-tab="institutional">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        Institutional
+                        <span class="tab-badge" id="instBadge">—</span>
+                    </button>
+                    <button class="tab-btn" data-tab="sr-zones">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        S&amp;R Zones
+                    </button>
+                    <button class="tab-btn" data-tab="depth-flow">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="12" y1="3" x2="12" y2="21"/>
+                        </svg>
+                        Depth &amp; Flow
+                    </button>
+                    <button class="tab-btn" data-tab="delta-patterns">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                            <polyline points="5 9 9 12 13 8 19 14"/>
+                        </svg>
+                        Delta Patterns
+                        <span class="tab-badge" id="deltaPatternBadge">0</span>
+                    </button>
+                    <button class="tab-btn" data-tab="all-zones">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                        All Zones
+                    </button>
+                    <button class="tab-btn" data-tab="market-phase">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 12h8M12 8v8"/>
+                        </svg>
+                        Market Phase
+                        <span class="tab-badge" id="marketPhaseBadge">—</span>
+                    </button>
+                    <button class="tab-btn" data-tab="events">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        Events
+                        <span class="tab-badge" id="eventsBadge">—</span>
+                    </button>
+                    <button class="tab-btn" data-tab="indian-stocks" id="indiaTabBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                        </svg>
+                        🇮🇳 Indian Stocks
+                    </button>
+                    <span class="tab-meta" id="zoneCountBadge">0 zones</span>
+                </div>
+                <!-- ═══ LIQUIDITY9 PANEL ═══ -->
+                <div class="tab-panel active" id="panel-liquidity9">
+                    <!-- Metrics Bar -->
+                    <div class="liq9-metrics">
+                        <div class="liq9-mc liq9-mc-support">
+                            <span class="liq9-ml">Support Zones</span>
+                            <span class="liq9-mv" id="liq9SupportCount">0</span>
+                        </div>
+                        <div class="liq9-mc liq9-mc-resistance">
+                            <span class="liq9-ml">Resistance</span>
+                            <span class="liq9-mv" id="liq9ResistanceCount">0</span>
+                        </div>
+                        <div class="liq9-mc liq9-mc-walls">
+                            <span class="liq9-ml">Liquidity Walls</span>
+                            <span class="liq9-mv" id="liq9Walls">0</span>
+                        </div>
+                        <div class="liq9-mc liq9-mc-imb">
+                            <span class="liq9-ml">Imbalance</span>
+                            <span class="liq9-mv" id="liq9Imbalance">0%</span>
+                        </div>
+                        <div class="liq9-mc liq9-mc-price">
+                            <span class="liq9-ml">Current Price</span>
+                            <span class="liq9-mv" id="liq9Price">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Price Chart -->
+                    <div class="cc cc-main sr-chart">
+                        <div class="ch">
+                            <span id="liq9ChartTitle">BTC/USDT — Liquidity Zones</span>
+                            <div class="cl">
+                                <span class="cd" style="background:#10b981"></span>Support 🟢
+                                <span class="cd" style="background:#f43f5e"></span>Resistance 🔴
+                                <span class="cd" style="background:#06b6d4"></span>Price
+                            </div>
+                        </div>
+                        <div id="liq9PriceChart" class="chart-large">
+                            <div id="liq9ZoneOverlay" class="zone-overlay"></div>
+                        </div>
+                    </div>
+
+                    <!-- Zone Columns -->
+                    <div class="liq9-zones-row">
+                        <div class="liq9-zcol">
+                            <div class="liq9-zcol-header" style="border-left-color:#10b981">
+                                <span class="liq9-zcol-dot" style="background:#10b981"></span>
+                                🟢 Support Zones — Bullish
+                                <span class="liq9-zcol-count" id="liq9SupCount">0</span>
+                            </div>
+                            <div class="liq9-zcol-body" id="liq9SupportZones">
+                                <div class="liq9-empty">Scan to detect support zones</div>
+                            </div>
+                        </div>
+                        <div class="liq9-zcol">
+                            <div class="liq9-zcol-header" style="border-left-color:#f43f5e">
+                                <span class="liq9-zcol-dot" style="background:#f43f5e"></span>
+                                🔴 Resistance Zones — Bearish
+                                <span class="liq9-zcol-count" id="liq9ResCount">0</span>
+                            </div>
+                            <div class="liq9-zcol-body" id="liq9ResistanceZones">
+                                <div class="liq9-empty">Scan to detect resistance zones</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="liq9-legend">
+                        <span class="liq9-legend-title">Zone Types:</span>
+                        <span><span class="dot" style="background:#22d3ee"></span>Order Block</span>
+                        <span><span class="dot" style="background:#8b5cf6"></span>FVG</span>
+                        <span><span class="dot" style="background:#f59e0b"></span>Sweep</span>
+                        <span><span class="dot" style="background:#06b6d4"></span>Wall</span>
+                        <span><span class="dot" style="background:#10b981"></span>HVN</span>
+                        <span><span class="dot" style="background:#34d399"></span>Swing</span>
+                        <button class="liq9-test-tg-btn" id="liq9TestTelegramBtn" title="Send a test Telegram alert to verify bot configuration">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                            </svg>
+                            Test Telegram
+                        </button>
+                        <span class="liq9-update-time" id="liq9UpdateTime">Last scan: --</span>
+                    </div>
+                </div>
+
+                <!-- ═══ INSTITUTIONAL FLOW PANEL ═══ -->
+                <div class="tab-panel" id="panel-institutional">
+                    <!-- Overall Score -->
+                    <div class="inst-score-bar">
+                        <div class="inst-score-card">
+                            <div class="inst-score-grade" id="instGrade">D</div>
+                            <div class="inst-score-meta">
+                                <span class="inst-score-label">Signal Confidence</span>
+                                <span class="inst-reliability-label" id="instReliability"></span>
+                                <span class="inst-score-verdict" id="instVerdict">Loading...</span>
+                            </div>
+                            <div class="inst-score-bar-track">
+                                <div class="inst-score-bar-fill" id="instScoreFill" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div class="inst-active-signals" id="instActiveSignals">
+                            <span class="inst-as-label">Active Signals</span>
+                            <span class="inst-as-count" id="instSignalCount">0</span>
+                        </div>
+                    </div>
+
+                    <!-- 6 Signal Cards -->
+                    <div class="inst-signals-row">
+                        <div class="inst-sig-card" id="instWhaleCard">
+                            <div class="inst-sig-icon" style="background:rgba(16,185,129,0.12)"><span>🐋</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">Whale Trades</span>
+                                <span class="inst-sig-val" id="instWhaleVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instWhaleBadge">—</span>
+                        </div>
+                        <div class="inst-sig-card" id="instOICard">
+                            <div class="inst-sig-icon" style="background:rgba(6,182,212,0.12)"><span>📈</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">Open Interest</span>
+                                <span class="inst-sig-val" id="instOIVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instOIBadge">—</span>
+                        </div>
+                        <div class="inst-sig-card" id="instFundingCard">
+                            <div class="inst-sig-icon" style="background:rgba(245,158,11,0.12)"><span>💰</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">Funding Rate</span>
+                                <span class="inst-sig-val" id="instFundingVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instFundingBadge">—</span>
+                        </div>
+                        <div class="inst-sig-card" id="instAnomalyCard">
+                            <div class="inst-sig-icon" style="background:rgba(244,63,94,0.12)"><span>🎭</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">Order Book Anomaly</span>
+                                <span class="inst-sig-val" id="instAnomalyVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instAnomalyBadge">—</span>
+                        </div>
+                        <div class="inst-sig-card" id="instPressureCard">
+                            <div class="inst-sig-icon" style="background:rgba(139,92,246,0.12)"><span>🏦</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">Volume Pressure*</span>
+                                <span class="inst-sig-val" id="instPressureVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instPressureBadge">—</span>
+                        </div>
+                        <div class="inst-sig-card" id="instCVDCard">
+                            <div class="inst-sig-icon" style="background:rgba(34,211,238,0.12)"><span>🔀</span></div>
+                            <div class="inst-sig-info">
+                                <span class="inst-sig-name">CVD Divergence</span>
+                                <span class="inst-sig-val" id="instCVDVal">—</span>
+                            </div>
+                            <span class="inst-sig-badge" id="instCVDBadge">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Whale Trades Section -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>🐋 Whale Trade Clustering</span>
+                            <span class="inst-whale-count" id="instWhaleCount">0 whale trades</span>
+                        </div>
+                        <div class="df-charts-row">
+                            <div class="cc cc-df-chart">
+                                <div class="ch"><span>Buy vs Sell Volume</span></div>
+                                <div id="instWhaleBarChart" style="height:200px"></div>
+                            </div>
+                            <div class="cc cc-df-chart">
+                                <div class="ch"><span>Volume Pressure (Binance only)*</span></div>
+                                <div id="instNetflowChart" style="height:200px"></div>
+                            </div>
+                        </div>
+                        <div class="inst-cluster-list" id="instClusters">
+                            <div class="inst-empty">Scan to detect whale clusters</div>
+                        </div>
+                    </div>
+
+                    <!-- OI + Funding Row -->
+                    <div class="df-charts-row">
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>📈 Open Interest History</span>
+                                <span class="inst-oi-trend" id="instOITrend">—</span>
+                            </div>
+                            <div id="instOIChart" style="height:220px"></div>
+                        </div>
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>💰 Funding Rate History</span>
+                                <span class="inst-fr-class" id="instFRClass">—</span>
+                            </div>
+                            <div id="instFundingChart" style="height:220px"></div>
+                        </div>
+                    </div>
+
+                    <!-- Spoofing + Cross CVD Row -->
+                    <div class="df-charts-row">
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>🎭 Order Book Anomalies</span>
+                                <span class="inst-spoof-risk" id="instSpoofRisk">—</span>
+                            </div>
+                            <div class="inst-spoof-list" id="instSpoofSignals">
+                                <div class="inst-empty">No order book anomalies detected</div>
+                            </div>
+                        </div>
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>🔀 Spot vs Futures CVD</span>
+                                <span class="inst-cvd-div" id="instCVDSignal">—</span>
+                            </div>
+                            <div id="instCrossCVDChart" style="height:220px"></div>
+                        </div>
+                    </div>
+
+                    <!-- Active Signals Legend -->
+                    <div class="cc">
+                        <div class="ch"><span>Active Signals</span></div>
+                        <div class="inst-signals-list" id="instSignalsList">
+                            <div class="inst-empty">No active signals detected</div>
+                        </div>
+                    </div>
+
+                    <!-- Disclaimer -->
+                    <div class="inst-disclaimer" id="instDisclaimer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span>Signals are statistical proxies derived from public market data. Not financial advice. Signals marked * use approximation methods (not on-chain or multi-exchange data).</span>
+                    </div>
+                </div>
+
+                <div class="tab-panel" id="panel-sr-zones">
+                    <div class="cc cc-main sr-chart">
+                        <div class="ch">
+                            <span>Price &amp; Liquidity Zones</span>
+                            <div class="cl">
+                                <span class="cd" style="background:#06b6d4"></span>Price
+                                <span class="cd" style="background:#10b981"></span>Support
+                                <span class="cd" style="background:#f43f5e"></span>Resistance
+                            </div>
+                        </div>
+                        <div id="priceChart" class="chart-large">
+                            <div id="zoneOverlay" class="zone-overlay"></div>
+                        </div>
+                    </div>
+                    <div class="zone-cards-grid">
+                        <div class="zcg-col">
+                            <div class="zcg-header">
+                                <span class="zcg-dot" style="background:#10b981"></span>
+                                Support Zones
+                                <span style="font-weight:400;color:var(--text-muted);font-size:9px;margin-left:auto" id="supportCardsCount">0</span>
+                            </div>
+                            <div class="zcg-body" id="supportCardsBody">
+                                <div class="zone-empty">Scan to detect support zones</div>
+                            </div>
+                        </div>
+                        <div class="zcg-col">
+                            <div class="zcg-header">
+                                <span class="zcg-dot" style="background:#f43f5e"></span>
+                                Resistance Zones
+                                <span style="font-weight:400;color:var(--text-muted);font-size:9px;margin-left:auto" id="resistanceCardsCount">0</span>
+                            </div>
+                            <div class="zcg-body" id="resistanceCardsBody">
+                                <div class="zone-empty">Scan to detect resistance zones</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-panel" id="panel-depth-flow">
+                    <!-- ═══ POWER METER ═══ -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>⚡ Buyer vs Seller Power</span>
+                            <span class="power-label" id="powerLabel">Scanning...</span>
+                        </div>
+                        <div class="power-meter-wrap">
+                            <div class="pm-labels">
+                                <span class="pm-buy-label">🟢 BUYERS</span>
+                                <span class="pm-bal-label" id="powerBalanceText">Balanced</span>
+                                <span class="pm-sell-label">🔴 SELLERS</span>
+                            </div>
+                            <div class="pm-track">
+                                <div class="pm-bar" id="powerBar" style="width:50%;background:#10b981"></div>
+                                <div class="pm-knob" id="powerKnob" style="left:50%"></div>
+                            </div>
+                            <div class="pm-stats">
+                                <span id="pmBuyVol">Bid: --</span>
+                                <span id="pmRatio">Ratio: --</span>
+                                <span id="pmSellVol">Ask: --</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ CHARTS ROW ═══ -->
+                    <div class="df-charts-row">
+                        <!-- Price Chart with Wall Markers -->
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>Price + Bid/Ask Walls</span>
+                                <div class="dl">
+                                    <span><span class="dl-dot" style="background:#10b981"></span>Bid Wall</span>
+                                    <span><span class="dl-dot" style="background:#f43f5e"></span>Ask Wall</span>
+                                    <span><span class="dl-dot" style="background:#f59e0b"></span>Price</span>
+                                </div>
+                            </div>
+                            <div id="depthPriceChart" style="height:300px"></div>
+                        </div>
+                        <!-- CVD Chart -->
+                        <div class="cc cc-df-chart">
+                            <div class="ch">
+                                <span>📊 CVD — Who's Buying?</span>
+                                <span class="cvd-badge" id="cvdStatusDepth">Neutral</span>
+                            </div>
+                            <div id="cvdChartDepth" style="height:300px"></div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ ACTIVE WALLS TABLE ═══ -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>🧱 Active Liquidity Walls</span>
+                            <span class="wall-count" id="wallsCountDepth">0 walls</span>
+                        </div>
+                        <div class="walls-table-wrap" id="wallsTableBody">
+                            <div class="walls-empty">Scan to detect liquidity walls</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ VOLUME PROFILE ═══ -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>📊 Volume Profile — HVN / LVN / POC</span>
+                            <div class="vp-info">
+                                <span class="vp-stat" id="vpPocStat">POC: --</span>
+                                <span class="vp-stat" id="vpVaStat">VA: --</span>
+                                <span class="vp-stat" id="vpVolStat">Vol: --</span>
+                            </div>
+                        </div>
+                        <div class="vp-wrap" id="vpWrap">
+                            <div class="vp-empty">Scan to see volume profile</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ ORDER BOOK DEPTH ═══ -->
+                    <div class="df-bottom-row">
+                        <div class="cc cc-half">
+                            <div class="ch">
+                                <span>📈 Order Book Depth</span>
+                                <span class="depth-badge" id="depthImbalanceDepth">Balanced</span>
+                            </div>
+                            <div id="depthHistChart" style="height:200px"></div>
+                        </div>
+                        <div class="cc cc-half">
+                            <div class="ch">
+                                <span>💧 Bid/Ask Imbalance by Level</span>
+                                <span class="imb-badge" id="imbBadgeDepth">0%</span>
+                            </div>
+                            <div id="imbalanceChart" style="height:200px"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-panel" id="panel-delta-patterns">
+                    <!-- ═══ DELTA PATTERNS OVERVIEW ═══ -->
+                    <div class="dp-summary-bar">
+                        <div class="dp-summary-stat">
+                            <span class="dp-summary-label">Active Patterns</span>
+                            <span class="dp-summary-value" id="dpActiveCount">0</span>
+                        </div>
+                        <div class="dp-summary-stat">
+                            <span class="dp-summary-label">Latest Delta</span>
+                            <span class="dp-summary-value" id="dpLatestDelta">--</span>
+                        </div>
+                        <div class="dp-summary-stat">
+                            <span class="dp-summary-label">Buy Volume</span>
+                            <span class="dp-summary-value" id="dpBuyVol">--</span>
+                        </div>
+                        <div class="dp-summary-stat">
+                            <span class="dp-summary-label">Sell Volume</span>
+                            <span class="dp-summary-value" id="dpSellVol">--</span>
+                        </div>
+                        <div class="dp-summary-stat">
+                            <span class="dp-summary-label">Bull/Bear Ratio</span>
+                            <span class="dp-summary-value" id="dpBullBearRatio">--</span>
+                        </div>
+                    </div>
+
+                    <!-- ═══ LIVE DELTA TABLE (numeric, no chart) ═══ -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>📊 Live Per-Candle Delta (Numeric)</span>
+                            <div class="cl">
+                                <span class="cd" style="background:#10b981"></span>+Buying
+                                <span class="cd" style="background:#f43f5e"></span>−Selling
+                                <span class="delta-live-dot" id="deltaLiveIndicator"></span>
+                                <span class="delta-live-label" id="deltaLiveLabel">--</span>
+                            </div>
+                        </div>
+                        <div class="delta-table-wrap" id="deltaTableWrap">
+                            <div class="delta-table-empty">Waiting for delta data...</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ PATTERN CARDS ═══ -->
+                    <div class="dp-patterns-grid" id="dpPatternsContainer">
+                        <div class="dp-empty">No delta patterns detected yet. Run a scan.</div>
+                    </div>
+
+                    <!-- ═══ PATTERN LEGEND ═══ -->
+                    <div class="dp-legend">
+                        <div class="dp-legend-item">
+                            <span class="dp-legend-icon dp-p1">1</span>
+                            <div>
+                                <strong>Absorption Candle</strong>
+                                <span>High volume, tiny body — someone absorbed all the selling</span>
+                            </div>
+                        </div>
+                        <div class="dp-legend-item">
+                            <span class="dp-legend-icon dp-p2">2</span>
+                            <div>
+                                <strong>Hidden Buying</strong>
+                                <span>Price falls but delta stays positive — buying the dip silently</span>
+                            </div>
+                        </div>
+                        <div class="dp-legend-item">
+                            <span class="dp-legend-icon dp-p3">3</span>
+                            <div>
+                                <strong>Stop Hunt Reversal</strong>
+                                <span>Break of key low, then instant snap back — collecting cheap coins</span>
+                            </div>
+                        </div>
+                        <div class="dp-legend-item">
+                            <span class="dp-legend-icon dp-p4">4</span>
+                            <div>
+                                <strong>Squeeze Explosion</strong>
+                                <span>Tight range for many candles, then massive delta breakout</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-panel" id="panel-all-zones">
+                    <div class="card">
+                        <div class="card-h">
+                            <span>Detected Liquidity Zones</span>
+                            <span id="zoneTableCount">0 zones</span>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="zoneTable">
+                                <thead><tr>
+                                    <th>Tier</th><th>Type</th><th>Source</th><th>Price</th>
+                                    <th>Dist%</th><th>Strength</th><th>Score</th><th>Conf</th>
+                                </tr></thead>
+                                <tbody id="zoneBody">
+                                    <tr><td colspan="8" class="empty">Run a scan to detect liquidity zones</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ MARKET PHASE PANEL ═══ -->
+                <div class="tab-panel" id="panel-market-phase">
+                    <!-- Phase Header -->
+                    <div class="mp-hero" id="mpHero">
+                        <div class="mp-hero-left">
+                            <div class="mp-phase-icon" id="mpPhaseIcon">⚡</div>
+                            <div>
+                                <div class="mp-phase-label" id="mpPhaseLabel">Analyzing...</div>
+                                <div class="mp-phase-desc" id="mpPhaseDesc">Fetching market data...</div>
+                            </div>
+                        </div>
+                        <div class="mp-hero-right">
+                            <div class="mp-confidence-wrap">
+                                <span class="mp-conf-label">Confidence</span>
+                                <span class="mp-conf-value" id="mpConfValue">—</span>
+                            </div>
+                            <div class="mp-secondary-wrap" id="mpSecondaryWrap" style="display:none">
+                                <span class="mp-sec-label">Secondary</span>
+                                <span class="mp-sec-value" id="mpSecValue">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Strategy Card -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>💡 Strategy Recommendation</span>
+                        </div>
+                        <div class="mp-strategy" id="mpStrategy">—</div>
+                    </div>
+
+                    <!-- Phase Scores -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>📊 Phase Probability Scores</span>
+                        </div>
+                        <div class="mp-scores" id="mpScores">
+                            <div class="mp-score-row">
+                                <span class="mp-score-label" style="color:#f59e0b">↔ Consolidation</span>
+                                <div class="mp-score-track"><div class="mp-score-fill" id="mpScoreConsolidation" style="width:0%;background:#f59e0b"></div></div>
+                                <span class="mp-score-val" id="mpScoreConsolidationVal">0%</span>
+                            </div>
+                            <div class="mp-score-row">
+                                <span class="mp-score-label" style="color:#10b981">↑ Bullish Trend</span>
+                                <div class="mp-score-track"><div class="mp-score-fill" id="mpScoreBullish" style="width:0%;background:#10b981"></div></div>
+                                <span class="mp-score-val" id="mpScoreBullishVal">0%</span>
+                            </div>
+                            <div class="mp-score-row">
+                                <span class="mp-score-label" style="color:#f43f5e">↓ Bearish Trend</span>
+                                <div class="mp-score-track"><div class="mp-score-fill" id="mpScoreBearish" style="width:0%;background:#f43f5e"></div></div>
+                                <span class="mp-score-val" id="mpScoreBearishVal">0%</span>
+                            </div>
+                            <div class="mp-score-row">
+                                <span class="mp-score-label" style="color:#8b5cf6">⚡ Volatile</span>
+                                <div class="mp-score-track"><div class="mp-score-fill" id="mpScoreVolatile" style="width:0%;background:#8b5cf6"></div></div>
+                                <span class="mp-score-val" id="mpScoreVolatileVal">0%</span>
+                            </div>
+                            <div class="mp-score-row">
+                                <span class="mp-score-label" style="color:#64748b">○ Silent / Dead</span>
+                                <div class="mp-score-track"><div class="mp-score-fill" id="mpScoreSilent" style="width:0%;background:#64748b"></div></div>
+                                <span class="mp-score-val" id="mpScoreSilentVal">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Indicator Grid -->
+                    <div class="mp-indicators-grid">
+                        <!-- ADX Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>📈 ADX (Trend Strength)</span>
+                                <span class="mp-ind-badge" id="mpAdxBadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-ind-big">
+                                    <span class="mp-ind-val" id="mpAdxVal">—</span>
+                                    <span class="mp-ind-unit">ADX</span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub" style="color:#10b981">+DI: <span id="mpPlusDI">—</span></span>
+                                    <span class="mp-ind-sub" style="color:#f43f5e">−DI: <span id="mpMinusDI">—</span></span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Bias: <span id="mpDIBias">—</span></span>
+                                    <span class="mp-ind-sub">Trend: <span id="mpAdxTrend">—</span></span>
+                                </div>
+                                <div id="mpAdxChart" style="height:100px;margin-top:8px"></div>
+                            </div>
+                        </div>
+
+                        <!-- ATR Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>🔊 ATR (Volatility)</span>
+                                <span class="mp-ind-badge" id="mpAtrBadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-ind-big">
+                                    <span class="mp-ind-val" id="mpAtrVal">—</span>
+                                    <span class="mp-ind-unit">ATR ($)</span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">% of Price: <span id="mpAtrPct">—</span></span>
+                                    <span class="mp-ind-sub">Trend: <span id="mpAtrTrend">—</span></span>
+                                </div>
+                                <div class="mp-vol-meter">
+                                    <div class="mp-vol-meter-track">
+                                        <div class="mp-vol-meter-fill" id="mpAtrMeter" style="width:50%"></div>
+                                    </div>
+                                    <div class="mp-vol-meter-labels">
+                                        <span>Low</span><span>Normal</span><span>High</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bollinger Bands Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>📉 Bollinger Bands</span>
+                                <span class="mp-ind-badge" id="mpBBBadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-bb-vis">
+                                    <div class="mp-bb-track">
+                                        <div class="mp-bb-band" id="mpBBBand">
+                                            <div class="mp-bb-mid"></div>
+                                            <div class="mp-bb-price" id="mpBBPrice"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mp-bb-labels">
+                                        <span id="mpBBUpper">—</span>
+                                        <span id="mpBBMiddle">—</span>
+                                        <span id="mpBBLower">—</span>
+                                    </div>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Width: <span id="mpBBWidth">—</span></span>
+                                    <span class="mp-ind-sub">%B: <span id="mpBBPctB">—</span></span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Percentile: <span id="mpBBPercentile">—</span></span>
+                                </div>
+                                <div id="mpBBWChart" style="height:80px;margin-top:8px"></div>
+                            </div>
+                        </div>
+
+                        <!-- Volume Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>📊 Volume Activity</span>
+                                <span class="mp-ind-badge" id="mpVolBadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-ind-big">
+                                    <span class="mp-ind-val" id="mpVolRatio">—</span>
+                                    <span class="mp-ind-unit">× Average</span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Current: <span id="mpVolCurrent">—</span></span>
+                                    <span class="mp-ind-sub">Avg: <span id="mpVolAvg">—</span></span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Trend: <span id="mpVolTrend">—</span></span>
+                                </div>
+                                <div class="mp-vol-meter">
+                                    <div class="mp-vol-meter-track">
+                                        <div class="mp-vol-meter-fill" id="mpVolMeter" style="width:50%"></div>
+                                    </div>
+                                    <div class="mp-vol-meter-labels">
+                                        <span>Dead</span><span>Normal</span><span>Spike</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Candle Body Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>🕯️ Candle Body Strength</span>
+                                <span class="mp-ind-badge" id="mpBodyBadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-ind-big">
+                                    <span class="mp-ind-val" id="mpBodyRatio">—</span>
+                                    <span class="mp-ind-unit">Body/Range</span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Avg: <span id="mpBodyAvg">—</span></span>
+                                    <span class="mp-ind-sub">Assessment: <span id="mpBodyAssess">—</span></span>
+                                </div>
+                                <div class="mp-vol-meter">
+                                    <div class="mp-vol-meter-track">
+                                        <div class="mp-vol-meter-fill" id="mpBodyMeter" style="width:50%"></div>
+                                    </div>
+                                    <div class="mp-vol-meter-labels">
+                                        <span>Doji</span><span>Mixed</span><span>Full Body</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Price Action Card -->
+                        <div class="cc">
+                            <div class="ch">
+                                <span>💹 Price Action</span>
+                                <span class="mp-ind-badge" id="mpPABadge">—</span>
+                            </div>
+                            <div class="mp-ind-body">
+                                <div class="mp-pa-mas">
+                                    <div class="mp-pa-row"><span class="mp-pa-label">Price</span><span class="mp-pa-val" id="mpPAPrice">—</span></div>
+                                    <div class="mp-pa-row"><span class="mp-pa-label" style="color:#22d3ee">MA20</span><span class="mp-pa-val" id="mpPAMA20">—</span></div>
+                                    <div class="mp-pa-row"><span class="mp-pa-label" style="color:#8b5cf6">MA50</span><span class="mp-pa-val" id="mpPAMA50">—</span></div>
+                                    <div class="mp-pa-row"><span class="mp-pa-label" style="color:#f59e0b">MA200</span><span class="mp-pa-val" id="mpPAMA200">—</span></div>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">MA Trend: <span id="mpPATrend">—</span></span>
+                                    <span class="mp-ind-sub">Range: <span id="mpPARange">—</span></span>
+                                </div>
+                                <div class="mp-ind-row">
+                                    <span class="mp-ind-sub">Position: <span id="mpPAPosition">—</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key Levels -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>🎯 Key Levels from Phase Analysis</span>
+                        </div>
+                        <div class="mp-key-levels" id="mpKeyLevels">
+                            <div class="mp-empty">Scan to see key levels</div>
+                        </div>
+                    </div>
+
+                    <!-- Disclaimer -->
+                    <div class="inst-disclaimer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span>Market phase detection is based on statistical indicators (ADX, ATR, Bollinger Bands, Volume, Candle Body ratios). Not financial advice. Phases can shift rapidly on news events.</span>
+                    </div>
+                </div>
+
+                <!-- ═══ EVENTS CALENDAR PANEL ═══ -->
+                <div class="tab-panel" id="panel-events">
+                    <!-- Events Summary -->
+                    <div class="ev-summary">
+                        <div class="ev-summary-card">
+                            <span class="ev-summary-val" id="evTotal">0</span>
+                            <span class="ev-summary-label">Upcoming Events</span>
+                        </div>
+                        <div class="ev-summary-card ev-high">
+                            <span class="ev-summary-val" id="evHighImpact">0</span>
+                            <span class="ev-summary-label">High Impact</span>
+                        </div>
+                        <div class="ev-summary-card ev-week">
+                            <span class="ev-summary-val" id="evThisWeek">0</span>
+                            <span class="ev-summary-label">This Week</span>
+                        </div>
+                        <div class="ev-summary-card ev-next">
+                            <span class="ev-summary-val" id="evNextName">—</span>
+                            <span class="ev-summary-label" id="evNextCountdown">Next High Impact</span>
+                        </div>
+                    </div>
+
+                    <!-- Filter Buttons -->
+                    <div class="ev-filters">
+                        <button class="ev-filter-btn active" data-ef="all">All Events</button>
+                        <button class="ev-filter-btn" data-ef="macro">📈 Macro</button>
+                        <button class="ev-filter-btn" data-ef="crypto">₿ Crypto</button>
+                        <button class="ev-filter-btn" data-ef="high">🔴 High Impact</button>
+                    </div>
+
+                    <!-- Events Timeline -->
+                    <div class="ev-timeline" id="evTimeline">
+                        <div class="ev-empty">Loading events calendar...</div>
+                    </div>
+
+                    <!-- Event Detail Modal -->
+                    <div class="ev-detail-overlay" id="evDetailOverlay" style="display:none">
+                        <div class="ev-detail-card">
+                            <div class="ev-detail-header">
+                                <span class="ev-detail-icon" id="evDetailIcon"></span>
+                                <div>
+                                    <div class="ev-detail-name" id="evDetailName"></div>
+                                    <div class="ev-detail-date" id="evDetailDate"></div>
+                                </div>
+                                <button class="ev-detail-close" id="evDetailClose">✕</button>
+                            </div>
+                            <div class="ev-detail-body">
+                                <div class="ev-detail-section">
+                                    <div class="ev-detail-section-title">What It Measures</div>
+                                    <div class="ev-detail-text" id="evDetailMeasures"></div>
+                                </div>
+                                <div class="ev-detail-section">
+                                    <div class="ev-detail-section-title">Crypto Market Impact</div>
+                                    <div class="ev-detail-text" id="evDetailImpact"></div>
+                                </div>
+                                <div class="ev-detail-section">
+                                    <div class="ev-detail-section-title">Possible Scenarios & Outcomes</div>
+                                    <div class="ev-scenarios" id="evDetailScenarios"></div>
+                                </div>
+                                <div class="ev-detail-source" id="evDetailSource"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Disclaimer -->
+                    <div class="inst-disclaimer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span>All dates sourced from official government schedules (Federal Reserve, BLS, BEA) and known crypto roadmaps. Impact ranges are historical averages — actual reactions vary. Not financial advice.</span>
+                    </div>
+                </div>
+
+                <!-- ═══ INDIAN STOCKS PANEL ═══ -->
+                <div class="tab-panel" id="panel-indian-stocks">
+                    <!-- Indian Stock Header with search -->
+                    <div class="in-header">
+                        <div class="in-header-left">
+                            <span class="in-flag">🇮🇳</span>
+                            <div>
+                                <div class="in-title">Indian Stock Market</div>
+                                <div class="in-subtitle">NSE — Liquidity Zones Scanner</div>
+                            </div>
+                        </div>
+                        <div class="in-controls">
+                            <div class="in-search-wrap">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                <input type="text" id="inStockSearch" placeholder="Search stocks..." autocomplete="off">
+                                <div class="in-search-results" id="inSearchResults"></div>
+                            </div>
+                            <select id="inIntervalSelect">
+                                <option value="5m">5m</option>
+                                <option value="15m" selected>15m</option>
+                                <option value="1h">1h</option>
+                                <option value="4h">4h</option>
+                                <option value="1d">1d</option>
+                            </select>
+                            <button id="inScanBtn" class="btn-primary in-scan-btn">Scan</button>
+                        </div>
+                    </div>
+
+                    <!-- Stock Info Bar -->
+                    <div class="in-info-bar" id="inInfoBar" style="display:none">
+                        <div class="in-info-main">
+                            <span class="in-stock-name" id="inStockName">--</span>
+                            <span class="in-stock-price" id="inStockPrice">--</span>
+                            <span class="in-stock-change" id="inStockChange">--</span>
+                        </div>
+                        <div class="in-info-meta">
+                            <span class="in-meta-item" id="inMetaExchange">NSE</span>
+                            <span class="in-meta-item" id="inMetaSector">--</span>
+                            <span class="in-meta-item" id="inMetaMcap">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Row -->
+                    <div class="in-metrics-bar">
+                        <div class="in-mc">
+                            <span class="in-ml">Support Zones</span>
+                            <span class="in-mv" id="inSupportCount">0</span>
+                        </div>
+                        <div class="in-mc">
+                            <span class="in-ml">Resistance</span>
+                            <span class="in-mv" id="inResistanceCount">0</span>
+                        </div>
+                        <div class="in-mc">
+                            <span class="in-ml">Volume</span>
+                            <span class="in-mv" id="inVolumeMetric">--</span>
+                        </div>
+                        <div class="in-mc">
+                            <span class="in-ml">Top Tier</span>
+                            <span class="in-mv" id="inTierZones">0</span>
+                        </div>
+                        <div class="in-mc">
+                            <span class="in-ml">Patterns</span>
+                            <span class="in-mv" id="inPatternCount">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Chart -->
+                    <div class="cc">
+                        <div class="ch">
+                            <span>📈 Price &amp; Liquidity Zones</span>
+                            <div class="cl">
+                                <span><span class="cd" style="background:#10b981"></span>Support</span>
+                                <span><span class="cd" style="background:#f43f5e"></span>Resistance</span>
+                            </div>
+                        </div>
+                        <div id="inPriceChart" class="chart-large"></div>
+                    </div>
+
+                    <!-- Zone Cards Row -->
+                    <div class="in-zone-cards-row">
+                        <div class="in-zc-col">
+                            <div class="in-zc-header">
+                                <span class="in-zc-dot" style="background:#10b981"></span>
+                                Support Zones
+                            </div>
+                            <div class="in-zc-body" id="inSupportCards">
+                                <div class="in-zone-empty">Scan to detect support zones</div>
+                            </div>
+                        </div>
+                        <div class="in-zc-col">
+                            <div class="in-zc-header">
+                                <span class="in-zc-dot" style="background:#f43f5e"></span>
+                                Resistance Zones
+                            </div>
+                            <div class="in-zc-body" id="inResistanceCards">
+                                <div class="in-zone-empty">Scan to detect resistance zones</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Volume Profile & CVD -->
+                    <div class="in-bottom-row">
+                        <div class="cc cc-half">
+                            <div class="ch">
+                                <span>📊 Volume Profile</span>
+                                <span class="in-vp-info" id="inVpInfo">POC: --</span>
+                            </div>
+                            <div class="in-vp-wrap" id="inVpWrap">
+                                <div class="in-vp-empty">Scan to view volume profile</div>
+                            </div>
+                        </div>
+                        <div class="cc cc-half">
+                            <div class="ch">
+                                <span>📊 CVD — Buy/Sell Pressure</span>
+                                <span class="in-cvd-label" id="inCvdLabel">--</span>
+                            </div>
+                            <div id="inCvdChart" style="height:200px"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    <!-- ═══ AI ASSISTANT CHAT WIDGET ═══ -->
+    <div id="aiChatFab" class="ai-chat-fab" title="AI Trading Assistant">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.4V22l3.5-2.5c.2 0 .3 0 .5 0a8 8 0 0 0 0-16z"/>
+            <circle cx="8" cy="10" r="1" fill="currentColor"/>
+            <circle cx="12" cy="10" r="1" fill="currentColor"/>
+            <circle cx="16" cy="10" r="1" fill="currentColor"/>
+        </svg>
+        <span class="ai-chat-fab-label">AI</span>
+    </div>
+
+    <div id="aiChatPanel" class="ai-chat-panel" style="display:none">
+        <div class="ai-chat-header">
+            <div class="ai-chat-header-left">
+                <div class="ai-chat-avatar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.4V22l3.5-2.5c.2 0 .3 0 .5 0a8 8 0 0 0 0-16z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="ai-chat-title">LiquidityGPT</div>
+                    <div class="ai-chat-subtitle" id="aiChatStatus">AI Trading Assistant</div>
+                </div>
+            </div>
+            <div class="ai-chat-header-actions">
+                <button class="ai-chat-theme-btn" id="aiChatThemeBtn" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false" onclick="toggleTheme()">
+                    <svg class="theme-icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    <svg class="theme-icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <button class="ai-chat-clear-btn" id="aiChatClearBtn" title="Clear chat">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+                <button class="ai-chat-close-btn" id="aiChatCloseBtn">\u00d7</button>
+            </div>
+        </div>
+        <div class="ai-chat-messages" id="aiChatMessages">
+            <div class="ai-chat-welcome">
+                <div class="ai-chat-welcome-icon">\u{1F9E0}</div>
+                <div class="ai-chat-welcome-title">LiquidityGPT</div>
+                <div class="ai-chat-welcome-desc">Ask me anything about trading, market structure, liquidity zones, order flow, or Indian stocks.</div>
+                <div class="ai-chat-suggestions">
+                    <button class="ai-chat-suggestion" data-msg="Explain Order Blocks and how to trade them">\u{1F4CA} Order Blocks</button>
+                    <button class="ai-chat-suggestion" data-msg="What are the best delta patterns for entry?">\u26A1 Delta Patterns</button>
+                    <button class="ai-chat-suggestion" data-msg="How do I use CVD divergence to find reversals?">\u{1F504} CVD Divergence</button>
+                    <button class="ai-chat-suggestion" data-msg="Explain the Liquidity9 scoring system">\u{1F48E} Zone Scoring</button>
+                    <button class="ai-chat-suggestion" data-msg="How do institutional traders use OI and funding rate?">\u{1F3E6} Institutional</button>
+                    <button class="ai-chat-suggestion" data-msg="Guide me on risk management for crypto trading">\u{1F6E1}\uFE0F Risk Mgmt</button>
+                </div>
+            </div>
+        </div>
+        <div class="ai-chat-input-area">
+            <div class="ai-chat-input-wrap">
+                <textarea id="aiChatInput" class="ai-chat-input" placeholder="Ask about trading, zones, order flow..." rows="1"></textarea>
+                <button id="aiChatSendBtn" class="ai-chat-send-btn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"/>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="ai-chat-disclaimer">Powered by Google Gemini. Not financial advice.</div>
+        </div>
+    </div>
+
+    <script>
+    /* LiquidityGPT AI Assistant Chat Widget */
+    (function() {
+      'use strict';
+      var aiChat = {
+        panel: null, fab: null, messages: null, input: null, sendBtn: null,
+        history: [], isOpen: false, isLoading: false,
+        init: function() {
+          this.panel = document.getElementById('aiChatPanel');
+          this.fab = document.getElementById('aiChatFab');
+          this.messages = document.getElementById('aiChatMessages');
+          this.input = document.getElementById('aiChatInput');
+          this.sendBtn = document.getElementById('aiChatSendBtn');
+          if (!this.panel || !this.fab) return;
+          var self = this;
+          this.fab.onclick = function() { self.open(); };
+          document.getElementById('aiChatCloseBtn').onclick = function() { self.close(); };
+          document.getElementById('aiChatClearBtn').onclick = function() { self.clearChat(); };
+          this.sendBtn.onclick = function() { self.sendMessage(); };
+          this.input.oninput = function() {
+            self.sendBtn.disabled = !self.input.value.trim();
+            self.input.style.height = 'auto';
+            self.input.style.height = Math.min(self.input.scrollHeight, 80) + 'px';
+          };
+          this.input.onkeydown = function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (self.input.value.trim() && !self.isLoading) self.sendMessage();
+            }
+          };
+          this._bindSuggestions();
+          document.onkeydown = function(e) { if (e.key === 'Escape' && self.isOpen) self.close(); };
+        },
+        _bindSuggestions: function() {
+          var btns = this.messages.querySelectorAll('.ai-chat-suggestion');
+          for (var i = 0; i < btns.length; i++) {
+            (function(btn) {
+              btn.onclick = function() {
+                var msg = btn.getAttribute('data-msg');
+                if (msg) { aiChat.input.value = msg; aiChat.sendBtn.disabled = false; aiChat.sendMessage(); }
+              };
+            })(btns[i]);
+          }
+        },
+        open: function() {
+          this.isOpen = true; this.panel.style.display = 'flex';
+          this.panel.classList.remove('hiding'); this.fab.classList.add('hidden');
+          var self = this; setTimeout(function() { self.input.focus(); }, 100);
+        },
+        close: function() {
+          this.isOpen = false; this.panel.classList.add('hiding');
+          this.fab.classList.remove('hidden');
+          var self = this;
+          setTimeout(function() { self.panel.style.display = 'none'; self.panel.classList.remove('hiding'); }, 250);
+        },
+        clearChat: function() {
+          this.history = [];
+          var html = '<div class="ai-chat-welcome">';
+          html += '<div class="ai-chat-welcome-icon">\u{1F9E0}</div>';
+          html += '<div class="ai-chat-welcome-title">LiquidityGPT</div>';
+          html += '<div class="ai-chat-welcome-desc">Ask me anything about trading, liquidity zones, order flow, or Indian stocks.</div>';
+          html += '<div class="ai-chat-suggestions">';
+          html += '<button class="ai-chat-suggestion" data-msg="Explain Order Blocks and how to trade them">\u{1F4CA} Order Blocks</button>';
+          html += '<button class="ai-chat-suggestion" data-msg="What are the best delta patterns for entry?">\u26A1 Delta Patterns</button>';
+          html += '<button class="ai-chat-suggestion" data-msg="How do I use CVD divergence to find reversals?">\u{1F504} CVD Divergence</button>';
+          html += '<button class="ai-chat-suggestion" data-msg="Explain the Liquidity9 scoring system">\u{1F48E} Zone Scoring</button>';
+          html += '<button class="ai-chat-suggestion" data-msg="How do institutional traders use OI and funding rate?">\u{1F3E6} Institutional</button>';
+          html += '<button class="ai-chat-suggestion" data-msg="Guide me on risk management for crypto trading">Risk Mgmt</button>';
+          html += '</div></div>';
+          this.messages.innerHTML = html;
+          this._bindSuggestions();
+        },
+        addMessage: function(role, content) {
+          var welcome = this.messages.querySelector('.ai-chat-welcome');
+          if (welcome) welcome.remove();
+          var isUser = role === 'user';
+          var msgEl = document.createElement('div');
+          msgEl.className = 'ai-chat-msg ' + role;
+          var avatar = document.createElement('div');
+          avatar.className = 'ai-chat-msg-avatar';
+          avatar.textContent = isUser ? '\u{1F464}' : '\u{1F9E0}';
+          var bubble = document.createElement('div');
+          bubble.className = 'ai-chat-msg-bubble';
+          bubble.innerHTML = this.formatMessage(content);
+          msgEl.appendChild(avatar);
+          msgEl.appendChild(bubble);
+          this.messages.appendChild(msgEl);
+          this.scrollToBottom();
+        },
+        showTyping: function() {
+          var el = document.createElement('div');
+          el.className = 'ai-chat-msg assistant'; el.id = 'aiChatTyping';
+          el.innerHTML = '<div class="ai-chat-msg-avatar">\u{1F9E0}</div><div class="ai-chat-typing-dots"><span class="ai-chat-typing-dot"></span><span class="ai-chat-typing-dot"></span><span class="ai-chat-typing-dot"></span></div>';
+          this.messages.appendChild(el); this.scrollToBottom();
+        },
+        hideTyping: function() { var el = document.getElementById('aiChatTyping'); if (el) el.remove(); },
+        formatMessage: function(text) {
+          return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')
+            .replace(/`(.+?)`/g,'<code>$1</code>').replace(/^- (.+)$/gm,'<li>$1</li>')
+            .replace(/(<li>.*<\/li>)/gs,'<ul>$1</ul>').replace(/\n/g,'<br>');
+        },
+        scrollToBottom: function() { this.messages.scrollTop = this.messages.scrollHeight; },
+        sendMessage: function() {
+          var text = this.input.value.trim();
+          if (!text || this.isLoading) return;
+          this.isLoading = true; this.sendBtn.disabled = true;
+          this.sendBtn.classList.add('loading');
+          this.sendBtn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>';
+          this.addMessage('user', text);
+          this.history.push({ role: 'user', content: text });
+          this.input.value = ''; this.input.style.height = 'auto';
+          this.showTyping();
+          var self = this;
+          var statusEl = document.getElementById('aiChatStatus');
+          if (statusEl) statusEl.textContent = 'Thinking...';
+          fetch('/api/ai-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, history: this.history.slice(-10) }),
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            self.hideTyping();
+            if (data.success && data.reply) {
+              self.addMessage('assistant', data.reply);
+              self.history.push({ role: 'assistant', content: data.reply });
+            } else {
+              self.addMessage('assistant', (data.error || 'Failed') + (data.hint ? '\n\n' + data.hint : ''));
+            }
+            if (statusEl) statusEl.textContent = 'AI Trading Assistant';
+          })
+          .catch(function() {
+            self.hideTyping();
+            self.addMessage('assistant', 'Connection error. Is the server running?');
+            if (statusEl) statusEl.textContent = 'AI Trading Assistant';
+          })
+          .finally(function() {
+            self.isLoading = false; self.sendBtn.disabled = false;
+            self.sendBtn.classList.remove('loading');
+            self.sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+          });
+        },
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { aiChat.init(); });
+      } else { aiChat.init(); }
+    })();
+    </script>
+    <script>
+    /* ═══════════════════════════════════════════════════════════
+       THEME TOGGLE (Light/Dark Mode)
+       ═══════════════════════════════════════════════════════════ */
+    (function() {
+      try {
+        var saved = localStorage.getItem('theme');
+        var useDark = saved === 'dark';
+        if (!useDark && !saved && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          useDark = true;
+        }
+        if (useDark) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          var btns = document.querySelectorAll('.theme-toggle-btn, .ai-chat-theme-btn');
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].setAttribute('aria-pressed', 'true');
+          }
+        }
+      } catch(e) { /* localStorage unavailable */ }
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var isDark = html.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        html.removeAttribute('data-theme');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+      }
+      // Sync aria-pressed on both toggle buttons
+      var btns = document.querySelectorAll('.theme-toggle-btn, .ai-chat-theme-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].setAttribute('aria-pressed', isDark ? 'false' : 'true');
+      }
+      try { localStorage.setItem('theme', isDark ? 'light' : 'dark'); } catch(e) {}
+    }
+    </script>
+    <script src="liq_market_phase.js"></script>
+    <script src="liq_events.js"></script>
+    <script src="liq_script.js"></script>
+</body>
+</html>
