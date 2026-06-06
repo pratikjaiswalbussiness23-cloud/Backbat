@@ -15,8 +15,16 @@ import requests
 import yfinance as yf
 import pandas as pd
 
-BINANCE_BASE = "https://api.binance.com"
+# Multiple Binance endpoints for geo-restriction fallback
+BINANCE_ENDPOINTS = [
+    "https://api.binance.com",
+    "https://api1.binance.com",
+    "https://api2.binance.com",
+    "https://api3.binance.com",
+    "https://api4.binance.com",
+]
 BINANCE_FUTURES = "https://fapi.binance.com"
+BINANCE_BASE = BINANCE_ENDPOINTS[0]  # Primary endpoint
 
 Z = 2.0  # Z-score threshold for order book walls
 
@@ -43,12 +51,34 @@ class RequestCache:
 
 
 class BinanceClient:
-    """Thin client for Binance REST API with request-level caching."""
+    """Thin client for Binance REST API with request-level caching and geo-fallback."""
 
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "LiquidityIdentifier/2.0"})
         self.cache = RequestCache(ttl=5)
+        self._working_base = None  # Cache the working endpoint
+
+    def _try_endpoints(self, path, params, timeout=10):
+        """Try all Binance endpoints until one works (geo-restriction fallback)."""
+        # If we already know which endpoint works, use it first
+        endpoints = list(BINANCE_ENDPOINTS)
+        if self._working_base and self._working_base in endpoints:
+            endpoints.remove(self._working_base)
+            endpoints.insert(0, self._working_base)
+
+        last_error = None
+        for base in endpoints:
+            try:
+                url = f"{base}{path}"
+                resp = self.session.get(url, params=params, timeout=timeout)
+                resp.raise_for_status()
+                self._working_base = base  # Cache the working endpoint
+                return resp.json()
+            except Exception as e:
+                last_error = e
+                continue
+        raise RuntimeError(f"All Binance endpoints failed. Last error: {last_error}")
 
     def klines(self, symbol="BTCUSDT", interval="15m", limit=200):
         cache_key = f"klines:{symbol}:{interval}:{limit}"
@@ -56,9 +86,7 @@ class BinanceClient:
         if cached is not None:
             return cached
         try:
-            url = f"{BINANCE_BASE}/api/v3/klines"
-            resp = self.session.get(url, params={"symbol": symbol, "interval": interval, "limit": limit}, timeout=10)
-            resp.raise_for_status()
+            data = self._try_endpoints("/api/v3/klines", {"symbol": symbol, "interval": interval, "limit": limit})
             result = [{
                 "time": k[0] // 1000,
                 "open": float(k[1]),
@@ -66,15 +94,11 @@ class BinanceClient:
                 "low": float(k[3]),
                 "close": float(k[4]),
                 "volume": float(k[5])
-            } for k in resp.json()]
+            } for k in data]
             self.cache.set(cache_key, result)
             return result
-        except requests.exceptions.Timeout:
-            raise RuntimeError(f"Binance API timeout fetching klines for {symbol} {interval}")
-        except requests.exceptions.ConnectionError:
-            raise RuntimeError(f"Cannot connect to Binance API for {symbol} {interval}")
         except Exception as e:
-            raise RuntimeError(f"Binance API error (klines): {e}")
+            raise RuntimeError(f"Failed to fetch price data: Binance API error (klines): {e}")
 
     def depth(self, symbol="BTCUSDT", limit=100):
         cache_key = f"depth:{symbol}:{limit}"
@@ -82,18 +106,13 @@ class BinanceClient:
         if cached is not None:
             return cached
         try:
-            url = f"{BINANCE_BASE}/api/v3/depth"
-            resp = self.session.get(url, params={"symbol": symbol, "limit": limit}, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+            data = self._try_endpoints("/api/v3/depth", {"symbol": symbol, "limit": limit})
             result = {
                 "bids": [[float(p), float(q)] for p, q in data["bids"]],
                 "asks": [[float(p), float(q)] for p, q in data["asks"]],
             }
             self.cache.set(cache_key, result)
             return result
-        except requests.exceptions.Timeout:
-            raise RuntimeError(f"Binance API timeout fetching depth for {symbol}")
         except Exception as e:
             raise RuntimeError(f"Binance API error (depth): {e}")
 
@@ -103,14 +122,10 @@ class BinanceClient:
         if cached is not None:
             return cached
         try:
-            url = f"{BINANCE_BASE}/api/v3/ticker/price"
-            resp = self.session.get(url, params={"symbol": symbol}, timeout=10)
-            resp.raise_for_status()
-            result = float(resp.json()["price"])
+            data = self._try_endpoints("/api/v3/ticker/price", {"symbol": symbol})
+            result = float(data["price"])
             self.cache.set(cache_key, result)
             return result
-        except requests.exceptions.Timeout:
-            raise RuntimeError(f"Binance API timeout fetching price for {symbol}")
         except Exception as e:
             raise RuntimeError(f"Binance API error (ticker): {e}")
 

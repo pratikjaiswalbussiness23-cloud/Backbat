@@ -168,17 +168,35 @@ class WallPersistenceTracker:
 
 
 class BinanceFetcher:
-    """REST fetcher for Binance data."""
+    """REST fetcher for Binance data with geo-restriction fallback."""
 
     BASE = "https://api.binance.com"
+    FALLBACKS = [
+        "https://api1.binance.com",
+        "https://api2.binance.com",
+        "https://api3.binance.com",
+        "https://api4.binance.com",
+    ]
+
+    def _try_fetch(self, path, params, timeout=15):
+        """Try primary + fallback endpoints for geo-restriction resilience."""
+        urls = [f"{self.BASE}{path}?{urlencode(params)}"] + \
+               [f"{fb}{path}?{urlencode(params)}" for fb in self.FALLBACKS]
+        last_err = None
+        for url in urls:
+            try:
+                req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urlopen(req, timeout=timeout) as resp:
+                    return json.loads(resp.read().decode())
+            except Exception as e:
+                last_err = e
+                continue
+        raise RuntimeError(f"All Binance endpoints failed: {last_err}")
 
     def klines(self, symbol="BTCUSDT", interval="15m", limit=500, start=None, end=None):
         params = {"symbol": symbol, "interval": interval, "limit": min(limit, 1000)}
         if start: params["startTime"] = str(start)
-        url = f"{self.BASE}/api/v3/klines?{urlencode(params)}"
-        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        data = self._try_fetch("/api/v3/klines", params)
         candles = []
         for k in data:
             t = int(k[0]) // 1000
