@@ -81,6 +81,11 @@ function collectParams() {
     partialExitRatio:   parseFloat(g('partialExitRatio').value) || 0.60,
     trailingStopMult:   parseFloat(g('trailingStopMult').value) || 0.5,
     target1RR:          parseFloat(g('target1RR').value) || 1.5,
+    // === Detection Filters ===
+    minNecklinePct:     parseFloat(g('minNecklinePct')?.value) || 0.3,
+    minTrendDropPct:    parseFloat(g('minTrendDropPct')?.value) || 0.5,
+    minPatternHeightPct: parseFloat(g('minPatternHeightPct')?.value) || 0.2,
+    lookbackBars:       parseInt(g('lookbackBars')?.value) || 60,
   };
 }
 
@@ -676,6 +681,10 @@ const SLIDER_MAP = {
   minCandlesBetween:   v => v,
   maxCandlesBetween:   v => v,
   minPatternHeightMult: v => parseFloat(v).toFixed(1) + '×',
+  minNecklinePct:     v => parseFloat(v).toFixed(1) + '%',
+  minTrendDropPct:    v => parseFloat(v).toFixed(1) + '%',
+  minPatternHeightPct: v => parseFloat(v).toFixed(1) + '%',
+  lookbackBars:       v => v,
   riskPerTrade:        v => parseFloat(v).toFixed(1) + '%',
   slMultiplier:        v => parseFloat(v).toFixed(1) + '×',
   minRR:               v => parseFloat(v).toFixed(1),

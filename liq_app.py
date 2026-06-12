@@ -12,17 +12,18 @@ import smtplib
 from email.message import EmailMessage
 from flask import Flask, jsonify, request, send_from_directory
 
-from liq_engine import LiquidityEngine
+from liq_engine import LiquidityEngine, QUALITY_ONLY_THRESH, QUALITY_MIN_COMPONENTS, QUALITY_EXCLUDED_SYMBOLS
 from liq_indian_engine import IndianLiquidityEngine
 from institutional_engine import InstitutionalEngine
 from liq_events import get_events_data
 
 app = Flask(__name__)
-engine = LiquidityEngine()
+engine_standard = LiquidityEngine(quality_only=False)
+engine_quality = LiquidityEngine(quality_only=True)
 indian_engine = IndianLiquidityEngine()
 institutional_engine = InstitutionalEngine()
 
-PORT = int(os.environ.get("PORT", 5001))
+PORT = int(os.environ.get("PORT", 5002))
 
 # ─── In-Memory Cache for Fast Refresh ────────────────────────
 
@@ -95,7 +96,11 @@ delta_live_cache = DeltaLiveCache(ttl_seconds=2)
 
 @app.route("/")
 def index():
-    return send_from_directory(".", "liq_index.html")
+    resp = send_from_directory(".", "liq_index.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/api/health")
@@ -108,20 +113,44 @@ def health():
     })
 
 
-def _run_scan(symbol, interval, force_refresh=False):
+@app.route("/api/signal", methods=["POST"])
+def signal():
+    """Final Signal Generator — actionable trade setups.
+    Uses ONLY FVG + Swing + Delta (OB, Sweep, VP, BNB excluded).
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        symbol = body.get("symbol", "BTCUSDT").upper()
+        interval = body.get("interval", "15m")
+        # Support qualityOnly param from the request
+        quality_only = body.get("qualityOnly", True)
+        active_engine = engine_quality if quality_only else engine_standard
+        result = active_engine.generate_signal(symbol, interval)
+        result["success"] = True
+        result["qualityOnly"] = quality_only
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "signal": "ERROR"}), 500
+
+
+def _run_scan(symbol, interval, force_refresh=False, quality_only=True):
     """Run scan with caching support.
     Returns (result_dict, from_cache_bool).
     The returned result dict must not be mutated after cache insertion.
     """
+    # Include quality_only in cache key so Quality vs Standard scans don't collide
+    cache_symbol = f"{symbol.upper()}_{'Q' if quality_only else 'S'}"
     if not force_refresh:
-        cached = scan_cache.get(symbol, interval)
+        cached = scan_cache.get(cache_symbol, interval)
         if cached is not None:
             return cached, True
 
-    result = engine.analyze_all(symbol, interval)
+    active_engine = engine_quality if quality_only else engine_standard
+    result = active_engine.analyze_all(symbol, interval)
     result["success"] = True
+    result["qualityOnly"] = quality_only
 
-    scan_cache.set(symbol, interval, result)
+    scan_cache.set(cache_symbol, interval, result)
     return result, False
 
 
@@ -133,7 +162,8 @@ def quick_scan():
         symbol = body.get("symbol", "BTCUSDT")
         interval = body.get("interval", "15m")
         force = body.get("forceRefresh", False)
-        result, from_cache = _run_scan(symbol, interval, force_refresh=force)
+        quality_only = body.get("qualityOnly", True)
+        result, from_cache = _run_scan(symbol, interval, force_refresh=force, quality_only=quality_only)
         # Return a copy so the cached object is never mutated by the caller
         resp = dict(result)
         resp["cached"] = from_cache
@@ -150,7 +180,7 @@ def full_scan():
         symbol = body.get("symbol", "BTCUSDT")
         interval = body.get("interval", "15m")
         # full-scan always bypasses cache and requests more depth data
-        result = engine.analyze_all(symbol, interval, depth_limit=200)
+        result = engine_quality.analyze_all(symbol, interval, depth_limit=200)
         result["success"] = True
         result["fullScan"] = True
         # Update cache with full data
@@ -200,13 +230,13 @@ def delta_live():
                 return jsonify(cached)
 
         # Only fetch candles — most lightweight call
-        candles = engine.client.klines(symbol, interval, limit=100)
+        candles = engine_quality.client.klines(symbol, interval, limit=100)
 
         # Compute CVD (includes per-candle delta)
-        cvd_result = engine.cvd.calculate(candles)
+        cvd_result = engine_quality.cvd.calculate(candles)
 
         # Compute delta patterns
-        delta_patterns = engine.delta_patterns.detect(candles, cvd_result.get("perCandleDelta", []))
+        delta_patterns = engine_quality.delta_patterns.detect(candles, cvd_result.get("perCandleDelta", []))
 
         # Get current price from last candle (avoids extra API call)
         last_candle = candles[-1] if candles else None
@@ -524,6 +554,111 @@ def telegram_test():
         return jsonify({"success": False, "error": str(e)}), 200
 
 
+# ═══ Signal Alert Endpoint ═══════════════════════════════
+
+@app.route("/api/signal-alert", methods=["POST"])
+def signal_alert():
+    """Send signal alert via Telegram and/or email when a new signal fires.
+    Expects: {symbol, interval, signal, direction, confidence, entry, sl, tp, rr, components}
+    """
+    try:
+        body = request.get_json(force=True) or {}
+        symbol = body.get("symbol", "BTCUSDT")
+        interval = body.get("interval", "15m")
+        signal = body.get("signal", "NO_TRADE")
+        direction = body.get("direction", "none")
+        confidence = body.get("confidence", "NONE")
+        entry = body.get("entry", 0)
+        sl = body.get("sl", 0)
+        tp = body.get("tp", 0)
+        rr = body.get("rr", 0)
+        components = body.get("components", [])
+
+        if signal != "TRADE":
+            return jsonify({"success": True, "skipped": True, "reason": "No active trade signal"})
+
+        active_comps = [c.get("name", "?") for c in components if c.get("active")]
+        emoji_dir = "🟢" if direction == "long" else "🔴"
+
+        msg_body = (
+            f"{emoji_dir} *Signal Alert* — {symbol} ({interval})\n\n"
+            f"📊 *Signal:* {signal}\n"
+            f"📌 Direction: *{direction.upper()}*\n"
+            f"🎯 Confidence: *{confidence}*\n"
+            f"💰 Entry: ${entry:,.2f}\n"
+            f"🛑 Stop Loss: ${sl:,.2f}\n"
+            f"✅ Take Profit: ${tp:,.2f}\n"
+            f"⚖️ Risk:Reward: 1:{rr:.1f}\n"
+            f"🔧 Components: {', '.join(active_comps)}\n\n"
+            f"⏰ {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n"
+            f"— Liquidity Identifier Signal Generator"
+        )
+
+        results = {}
+
+        # Send Telegram alert
+        if TELEGRAM_ENABLED:
+            try:
+                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                payload = {
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": msg_body,
+                    "parse_mode": "Markdown",
+                    "disable_web_page_preview": True,
+                }
+                resp = requests.post(url, data=payload, timeout=10)
+                tg_result = resp.json()
+                results["telegram"] = tg_result.get("ok", False)
+                if tg_result.get("ok"):
+                    print(f"  [Signal Alert] Telegram sent for {symbol} {direction.upper()}")
+                else:
+                    print(f"  [Signal Alert] Telegram error: {tg_result.get('description')}")
+            except Exception as e:
+                results["telegram"] = False
+                print(f"  [Signal Alert] Telegram failed: {e}")
+
+        # Send Email alert
+        if EMAIL_ENABLED:
+            try:
+                email_body = (
+                    f"Liquidity Identifier — Signal Alert\n\n"
+                    f"Signal: {signal}\n"
+                    f"Direction: {direction.upper()}\n"
+                    f"Confidence: {confidence}\n"
+                    f"Symbol: {symbol} ({interval})\n\n"
+                    f"Entry: ${entry:,.2f}\n"
+                    f"Stop Loss: ${sl:,.2f}\n"
+                    f"Take Profit: ${tp:,.2f}\n"
+                    f"Risk:Reward: 1:{rr:.1f}\n"
+                    f"Components: {', '.join(active_comps)}\n\n"
+                    f"Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n"
+                    f"— Liquidity Identifier"
+                )
+                msg = EmailMessage()
+                msg["Subject"] = f"{emoji_dir} Signal: {direction.upper()} {symbol} ({interval}) — {confidence}"
+                msg["From"] = EMAIL_SENDER
+                msg["To"] = EMAIL_RECIPIENT
+                msg.set_content(email_body)
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
+                    smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                    smtp.send_message(msg)
+                results["email"] = True
+                print(f"  [Signal Alert] Email sent for {symbol} {direction.upper()}")
+            except Exception as e:
+                results["email"] = False
+                print(f"  [Signal Alert] Email failed: {e}")
+
+        return jsonify({
+            "success": True,
+            "sent": True,
+            "results": results,
+            "message": f"{emoji_dir} {direction.upper()} signal alert for {symbol}",
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ═══ Institutional Flow Endpoint ═══════════════════════════
 
 @app.route("/api/institutional", methods=["POST"])
@@ -733,7 +868,7 @@ def market_phase():
         interval = body.get("interval", "15m")
 
         # Fetch candles from Binance (primary)
-        candles = engine.client.klines(symbol, interval, limit=200)
+        candles = engine_quality.client.klines(symbol, interval, limit=200)
         if not candles or len(candles) < 30:
             return jsonify({"success": False, "error": "Insufficient candle data"}), 502
 
@@ -1263,7 +1398,7 @@ if __name__ == "__main__":
         print(f"  AI Assistant: ENABLED — {', '.join(ai_providers)}")
     else:
         print("  AI Assistant: DISABLED (set GEMINI_API_KEY or GROQ_API_KEY env var)")
-        print("    Free keys: Gemini → aistudio.google.com  |  Groq → console.groq.com")
+        print("    Free keys: Gemini -> aistudio.google.com  |  Groq -> console.groq.com")
     print()
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
     app.run(host="0.0.0.0", port=PORT, debug=debug_mode)

@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Liquidity Identifier — S&amp;R Zones</title>
     <link rel="stylesheet" href="liq_styles.css">
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -66,7 +69,15 @@
                             <option value="60">60s</option>
                         </select>
                     </div>
+                    <div class="quality-toggle-group">
+                        <label class="quality-toggle">
+                            <input type="checkbox" id="qualityToggle" checked>
+                            <span class="quality-toggle-slider"></span>
+                        </label>
+                        <span class="quality-toggle-label" id="qualityToggleLabel">Quality</span>
+                    </div>
                 </div>
+
                 <div class="price-box">
                     <span class="price" id="priceValue">--</span>
                     <span class="price-label" id="priceLabel">BTC</span>
@@ -111,11 +122,17 @@
                     </div>
                 </div>
                 <div class="sidebar-footer">
+                    <button class="sd-sidebar-btn" id="sdToggle">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        Live Signals
+                    </button>
                     <div class="update-time" id="updateTime">Last scan: --</div>
-                <div class="cache-indicator" id="cacheIndicator">
-                    <span class="ci-dot" id="cacheDot"></span>
-                    <span id="cacheLabel">Live</span>
-                </div>
+                    <div class="cache-indicator" id="cacheIndicator">
+                        <span class="ci-dot" id="cacheDot"></span>
+                        <span id="cacheLabel">Live</span>
+                    </div>
                 </div>
             </aside>
             <main class="content">
@@ -981,7 +998,7 @@
                     </div>
                 </div>
 
-                <!-- ═══ INDIAN STOCKS PANEL ═══ -->
+                <!-- ⭐️ INDIAN STOCKS PANEL ⭐️ -->
                 <div class="tab-panel" id="panel-indian-stocks">
                     <!-- Indian Stock Header with search -->
                     <div class="in-header">
@@ -1108,7 +1125,30 @@
         </div>
     </div>
     <!-- ═══ AI ASSISTANT CHAT WIDGET ═══ -->
-    <div id="aiChatFab" class="ai-chat-fab" title="AI Trading Assistant">
+    
+    <!-- SIGNALS SIDEBAR -->
+<div class="sd-overlay" id="sdOverlay"></div>
+<div class="sd-panel" id="sdPanel">
+    <div class="sd-header">
+        <span class="sd-title">Live Signals</span>
+        <button class="sd-close" id="sdClose">&times;</button>
+    </div>
+    <div class="sd-body" id="sdBody">
+        <div class="sd-status" id="sdStatus">Run a scan to see signals</div>
+        <div class="sd-signal" id="sdSignal" style="display:none">
+            <div class="sd-hero" id="sdHero">
+                <div class="sd-dir" id="sdDir">--</div>
+                <div class="sd-conf" id="sdConf">--</div>
+            </div>
+            <div class="sd-detail">
+                <div class="sd-row"><span>Entry</span><span id="sdEntry">--</span></div>
+                <div class="sd-row"><span>Stop Loss</span><span id="sdSL">--</span></div>
+                <div class="sd-row"><span>Take Profit</span><span id="sdTP">--</span></div>
+                <div class="sd-row"><span>R:R</span><span id="sdRR">--</span></div>
+            </div>
+        </div>
+    </div>
+</div><div id="aiChatFab" class="ai-chat-fab" title="AI Trading Assistant">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.4V22l3.5-2.5c.2 0 .3 0 .5 0a8 8 0 0 0 0-16z"/>
             <circle cx="8" cy="10" r="1" fill="currentColor"/>
@@ -1359,6 +1399,71 @@
     </script>
     <script src="liq_market_phase.js"></script>
     <script src="liq_events.js"></script>
-    <script src="liq_script.js"></script>
+    <script src="liq_script.js?v=1781168691"></script>
+    <script>
+/* ═══ SIGNALS SIDEBAR ═══ */
+(function() {
+  var open = false;
+  var panel = document.getElementById("sdPanel");
+  var overlay = document.getElementById("sdOverlay");
+  var toggle = document.getElementById("sdToggle");
+  var close = document.getElementById("sdClose");
+  if (!panel || !overlay) return;
+  function openSidebar() {
+    open = true;
+    panel.classList.add("open");
+    overlay.classList.add("active");
+    if (toggle) toggle.classList.add("active");
+    fetchSignal();
+  }
+  function closeSidebar() {
+    open = false;
+    panel.classList.remove("open");
+    overlay.classList.remove("active");
+    if (toggle) toggle.classList.remove("active");
+  }
+  if (toggle) toggle.addEventListener("click", function() { open ? closeSidebar() : openSidebar(); });
+  if (close) close.addEventListener("click", closeSidebar);
+  if (overlay) overlay.addEventListener("click", closeSidebar);
+  document.addEventListener("keydown", function(e) { if (e.key === "Escape" && open) closeSidebar(); });
+  async function fetchSignal() {
+    var status = document.getElementById("sdStatus");
+    var signal = document.getElementById("sdSignal");
+    if (!status) return;
+    status.textContent = "Loading...";
+    try {
+      var r = await fetch("/api/signal", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({symbol: (document.getElementById("symbolSelect")||{}).value || "BTCUSDT", interval: (document.getElementById("intervalSelect")||{}).value || "15m"})
+      });
+      var d = await r.json();
+      if (d.success && d.signal === "TRADE") {
+        status.style.display = "none";
+        signal.style.display = "block";
+        var setText = function(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
+        setText("sdDir", (d.direction || "?").toUpperCase());
+        setText("sdConf", d.confidence || "--");
+        setText("sdEntry", "$" + (Number(d.entry) || 0).toLocaleString());
+        setText("sdSL", "$" + (Number(d.sl) || 0).toLocaleString());
+        setText("sdTP", "$" + (Number(d.tp) || 0).toLocaleString());
+        setText("sdRR", d.rr ? "1:" + Number(d.rr).toFixed(1) : "--");
+        var hero = document.getElementById("sdHero");
+        if (hero) {
+          hero.className = "sd-hero" + (d.direction === "long" ? " sd-long" : d.direction === "short" ? " sd-short" : "");
+        }
+      } else {
+        signal.style.display = "none";
+        status.style.display = "block";
+        status.textContent = d.signal === "NO_TRADE" ? "No active signal. Run a scan." : (d.error || "No signal");
+      }
+    } catch(e) {
+      signal.style.display = "none";
+      status.style.display = "block";
+      status.textContent = "Connection failed. Is the server running?";
+    }
+  }
+})();
+</script>
 </body>
 </html>

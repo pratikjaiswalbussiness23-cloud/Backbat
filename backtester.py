@@ -59,6 +59,11 @@ class Backtester:
             "partialExitRatio": 0.6,
             "trailingStopMult": 0.5,
             "target1RR": 1.5,
+            # --- Detection Filters (for real data) ---
+            "minNecklinePct": 0.3,
+            "minTrendDropPct": 0.5,
+            "minPatternHeightPct": 0.2,
+            "lookbackBars": 60,
         }
 
     def _reset_state(self):
@@ -796,43 +801,115 @@ class Backtester:
         return self._finalize()
 
     def _detect_patterns_in_real_data(self):
+        """Detect double bottom patterns in real market data.
+
+        A valid double bottom requires:
+        1. Two swing lows at similar price levels (within maxBottomDiff)
+        2. A meaningful neckline rally between the two touches
+        3. A prior downtrend before the first bottom (context)
+        4. No chaining (each bottom can only be used once)
+        """
         sl = self.params["swingLength"]
         lows_arr = [c["low"] for c in self.candles]
+        highs_arr = [c["high"] for c in self.candles]
+        used_b2_indices = set()  # Prevent chaining: each bottom used only once
+        p = self.params
+
+        # Collect all swing lows first
+        swing_lows = []
         for i in range(sl, len(self.candles) - sl):
-            if not self.is_pivot_low(lows_arr, i, sl):
+            if self.is_pivot_low(lows_arr, i, sl):
+                swing_lows.append((i, lows_arr[i]))
+
+        # Match swing lows into double bottom pairs (right-to-left, avoiding chaining)
+        for idx in range(len(swing_lows) - 1, -1, -1):
+            i, low_i = swing_lows[idx]
+            if i in used_b2_indices:
                 continue
-            for j in range(i - 1, max(0, i - 60) - 1, -1):
-                if not self.is_pivot_low(lows_arr, j, sl):
+
+            best_j = None
+            best_score = -1
+
+            for jdx in range(idx - 1, -1, -1):
+                j, low_j = swing_lows[jdx]
+                if j in used_b2_indices:
                     continue
+
                 gap = i - j
-                bottom_diff_pct = (lows_arr[i] - lows_arr[j]) / lows_arr[j]
-                # Second bottom must be AT or BELOW the first
-                p = self.params
-                if (-p["maxBottomDiff"] <= bottom_diff_pct <= 0
-                        and p["minCandlesBetween"] <= gap <= p["maxCandlesBetween"]):
-                    neck = self.calc_neckline(j, i)
-                    ph = self.calc_pattern_height(j, i)
-                    if neck is not None and ph is not None:
-                        self.pattern_markers.append({
-                            "b1Idx": j, "b2Idx": i, "breakoutIdx": i + 3,
-                            "necklinePrice": neck, "targetPrice": neck + ph,
-                            "bottom1Price": lows_arr[j], "bottom2Price": lows_arr[i],
-                            "outcome": "detected", "move": ph * 3, "gap": gap,
-                            "bottomDiff": bottom_diff_pct, "height": ph, "scenario": None,
-                        })
-                        break
+                if gap < p["minCandlesBetween"] or gap > p["maxCandlesBetween"]:
+                    continue
+
+                bottom_diff_pct = (low_i - low_j) / low_j
+                # Second bottom (i) must be AT or BELOW the first (j), within tolerance
+                if not (-p["maxBottomDiff"] <= bottom_diff_pct <= 0):
+                    continue
+
+                # --- Neckline check: must have a meaningful rally between the two touches ---
+                neck = self.calc_neckline(j, i)
+                if neck is None:
+                    continue
+                avg_bottom = (low_j + low_i) / 2
+                neckline_pct_above = (neck - avg_bottom) / avg_bottom
+                min_neck_pct = p.get("minNecklinePct", 0.3) / 100  # UI sends as percentage
+                if neckline_pct_above < min_neck_pct:
+                    continue
+
+                # --- Trend context: price should have dropped before the first bottom ---
+                drop_pct = 0  # Reset for each candidate
+                min_drop = p.get("minTrendDropPct", 0.5) / 100  # UI sends as percentage
+                lookback = p.get("lookbackBars", 60)
+                lookback_start = max(0, j - lookback)
+                prior_high = max(highs_arr[lookback_start:j]) if lookback_start < j else 0
+                if prior_high > 0:
+                    drop_pct = (prior_high - low_j) / prior_high
+                    if drop_pct < min_drop:
+                        continue
+
+                # --- Minimum pattern height ---
+                ph = self.calc_pattern_height(j, i)
+                if ph is None:
+                    continue
+                min_height_pct = p.get("minPatternHeightPct", 0.2) / 100  # UI sends as percentage
+                if ph / avg_bottom < min_height_pct:
+                    continue
+
+                # --- Score the quality of this match ---
+                similarity_score = 1.0 - abs(bottom_diff_pct) / p["maxBottomDiff"]
+                neckline_score = min(1.0, neckline_pct_above / 0.01)
+                trend_score = min(1.0, drop_pct / 0.02) if drop_pct > min_drop else 0
+                gap_score = 1.0 - abs(gap - 10) / 20
+                total_score = similarity_score * 0.3 + neckline_score * 0.3 + trend_score * 0.25 + gap_score * 0.15
+
+                if total_score > best_score:
+                    best_score = total_score
+                    best_j = (j, low_j, gap, bottom_diff_pct, neck, ph, neckline_pct_above)
+
+            if best_j is not None:
+                j, low_j, gap, bottom_diff_pct, neck, ph, neckline_pct_above = best_j
+                used_b2_indices.add(i)  # Mark this bottom as used
+                self.pattern_markers.append({
+                    "b1Idx": j, "b2Idx": i, "breakoutIdx": i + 3,
+                    "necklinePrice": neck, "targetPrice": neck + ph,
+                    "bottom1Price": low_j, "bottom2Price": low_i,
+                    "outcome": "detected", "move": ph * 3, "gap": gap,
+                    "bottomDiff": bottom_diff_pct, "height": ph, "scenario": None,
+                })
 
     def _finalize(self):
         metrics = self._calc_metrics()
+        # Include enough candles so all detected pattern markers are visible on chart
+        max_idx = 200
+        for m in self.pattern_markers:
+            max_idx = max(max_idx, m.get("b2Idx", 0) + 20)
         return {
             "metrics": metrics,
             "trades": self._serialize_trades(),
             "patternMarkers": self._serialize_markers(),
-            "candles": self._serialize_candles(200),
+            "candles": self._serialize_candles(max_idx),
             "equity": self.account["equity"],
         }
 
-    def _serialize_candles(self, max_candles=200):
+    def _serialize_candles(self, max_candles=500):
         return self.candles[:max_candles]
 
     def _serialize_markers(self):

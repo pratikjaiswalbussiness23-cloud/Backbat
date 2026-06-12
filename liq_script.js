@@ -18,6 +18,7 @@
     activeTab: 'liquidity9',
     autoRefreshTimer: null,
     scanCount: 0,
+    qualityOnly: true,
     deltaLivePollTimer: null,
     deltaData: null,
     previousPatternKeys: null,
@@ -67,6 +68,8 @@
       'delta-patterns': $('#panel-delta-patterns'),
       'all-zones': $('#panel-all-zones'),
       'indian-stocks': $('#panel-indian-stocks'),
+      'live-signals': $('#panel-live-signals'),
+      'backtest-confidence': $('#panel-backtest-confidence'),
     },
     // Indian stock elements
     inStockSearch: $('#inStockSearch'),
@@ -1762,6 +1765,9 @@
     // Render zone cards
     renderLiquidity9ZoneCards(data);
 
+    // Update quality filter display
+    updateQualityFilter(data);
+
     // Update timestamp
     const now = new Date();
     setText('liq9UpdateTime', 'Last scan: ' + now.toLocaleTimeString());
@@ -1771,6 +1777,72 @@
     const el = document.getElementById(id);
     if (el) el.textContent = val;
   }
+  // --- Quality Confluence Filter Display ---
+  function updateQualityFilter(data) {
+    var qf = data.qualityFilter;
+    var card = document.getElementById('qualityFilterCard');
+    if (!card || !qf) return;
+    card.style.display = 'block';
+    var passes = qf.passes_quality;
+    var score = qf.quality_score || 0;
+    var comps = qf.components || [];
+    var dir = qf.direction;
+    var excluded = qf.reason === 'symbol_excluded';
+
+    // Verdict icon
+    var verdictEl = document.getElementById('qfVerdict');
+    if (verdictEl) {
+      if (excluded) { verdictEl.textContent = '\u{1F6AB}'; verdictEl.style.color = '#64748b'; }
+      else if (passes && dir === 'long') { verdictEl.textContent = '\u{1F7E2}'; verdictEl.style.color = '#10b981'; }
+      else if (passes && dir === 'short') { verdictEl.textContent = '\u{1F534}'; verdictEl.style.color = '#f43f5e'; }
+      else { verdictEl.textContent = '\u23F8\uFE0F'; verdictEl.style.color = '#f59e0b'; }
+    }
+
+    // Reason text
+    var reasonEl = document.getElementById('qfReason');
+    if (reasonEl) {
+      if (excluded) reasonEl.textContent = 'Symbol excluded from quality filter';
+      else if (!passes && score < 0.5) reasonEl.textContent = 'Score ' + score.toFixed(2) + ' below 0.50 threshold';
+      else if (!passes && comps.length < 2) reasonEl.textContent = comps.length + ' component(s) < 2 required';
+      else reasonEl.textContent = dir ? dir.toUpperCase() + ' signal passing quality gate' : 'Analyzing...';
+    }
+
+    // Score value
+    var scoreEl = document.getElementById('qfScore');
+    if (scoreEl) scoreEl.textContent = score.toFixed(2);
+
+    // Score bar
+    var barEl = document.getElementById('qfScoreBar');
+    if (barEl) {
+      var pct = Math.min(100, score * 100);
+      barEl.style.width = pct + '%';
+      barEl.style.background = score >= 0.5 ? '#10b981' : score >= 0.3 ? '#f59e0b' : '#f43f5e';
+    }
+
+    // Component badges
+    var compsEl = document.getElementById('qfComponents');
+    if (compsEl) {
+      if (excluded) { compsEl.innerHTML = '<span style="color:#64748b">N/A</span>'; }
+      else if (!comps.length) { compsEl.innerHTML = '<span style="color:#64748b">None</span>'; }
+      else {
+        var compColors = { 'OB': '#22d3ee', 'FVG': '#8b5cf6', 'Swing': '#10b981', 'VP': '#06b6d4', 'Sweep': '#f59e0b' };
+        compsEl.innerHTML = comps.map(function(c) {
+          var col = compColors[c] || '#94a3b8';
+          return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + col + '22;color:' + col + '">' + c + '</span>';
+        }).join(' ');
+      }
+    }
+
+    // Direction label
+    var dirEl = document.getElementById('qfDirection');
+    if (dirEl) {
+      if (excluded) { dirEl.textContent = '--'; dirEl.style.color = '#64748b'; }
+      else if (dir === 'long') { dirEl.textContent = 'LONG'; dirEl.style.color = '#10b981'; }
+      else if (dir === 'short') { dirEl.textContent = 'SHORT'; dirEl.style.color = '#f43f5e'; }
+      else { dirEl.textContent = '--'; dirEl.style.color = '#94a3b8'; }
+    }
+  }
+
 
   function renderLiquidity9Chart(data) {
     if (!liq9Pc || !liq9PriceSeries) return;
@@ -1924,7 +1996,7 @@
     });
     setTimeout(() => {
       resizeCharts();
-      if ((tabId === 'liquidity9' || tabId === 'institutional' || tabId === 'sr-zones' || tabId === 'depth-flow' || tabId === 'delta-patterns') && state.data) {
+      if ((tabId === 'liquidity9' || tabId === 'institutional' || tabId === 'sr-zones' || tabId === 'depth-flow' || tabId === 'delta-patterns' || tabId === 'indian-stocks') && state.data) {
         if (tabId === 'liquidity9') updateLiquidity9Panel(state.data);
         if (tabId === 'institutional') startInstitutionalPolling();
         else stopInstitutionalPolling();
@@ -2371,6 +2443,7 @@
           symbol: state.symbol,
           interval: state.interval,
           forceRefresh: forceRefresh,
+          qualityOnly: state.qualityOnly,
         }),
       });
       const d = await r.json();
@@ -2452,6 +2525,45 @@
         renderZoneCards(state.data);
       }
     }));
+
+
+    // Quality filter toggle
+    var qualityToggle = document.getElementById('qualityToggle');
+    var qualityLabel = document.getElementById('qualityToggleLabel');
+    var qualityGroup = document.querySelector('.quality-toggle-group');
+    if (qualityToggle) {
+      // Load saved preference
+      var saved = localStorage.getItem('qualityOnly');
+      if (saved !== null) {
+        state.qualityOnly = saved === 'true';
+        qualityToggle.checked = state.qualityOnly;
+      } else {
+        state.qualityOnly = true;
+        qualityToggle.checked = true;
+      }
+      // Update label on load
+      if (qualityLabel) {
+        qualityLabel.textContent = state.qualityOnly ? 'Quality' : 'Standard';
+        qualityLabel.style.color = state.qualityOnly ? '#10b981' : '#94a3b8';
+      }
+      if (qualityGroup) {
+        qualityGroup.classList.toggle('active', state.qualityOnly);
+      }
+
+      qualityToggle.addEventListener('change', function() {
+        state.qualityOnly = this.checked;
+        localStorage.setItem('qualityOnly', state.qualityOnly);
+        if (qualityLabel) {
+          qualityLabel.textContent = state.qualityOnly ? 'Quality' : 'Standard';
+          qualityLabel.style.color = state.qualityOnly ? '#10b981' : '#94a3b8';
+        }
+        if (qualityGroup) {
+          qualityGroup.classList.toggle('active', state.qualityOnly);
+        }
+        // Re-scan with new mode
+        runScan(true);
+      });
+    }
 
     // Keyboard shortcut: R or r to refresh
     document.addEventListener('keydown', (e) => {
