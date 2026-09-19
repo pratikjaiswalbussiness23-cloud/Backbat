@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.13,<3",
     "pydantic-settings>=2.7,<3",
     "typer>=0.15,<1",
+    "yfinance>=1.7,<2",  # P1-T3: yfinance provider (see OQ-0006, DEPENDENCIES.md)
 ]
 
 [dependency-groups]
@@ -37,6 +38,7 @@ build-backend = "uv_build"
 testpaths = ["tests"]
 addopts = '-q --strict-markers --strict-config -m "not network and not llm_live"'
 markers = [
+    "unit: pure unit test, no network/LLM (P1-T3 convention; see OQ-0007)",
     "lookahead: no-lookahead defence tests (ROADMAP §4.5, P4-T10)",
     "slow: long-running tests, run nightly",
     "network: tests hitting real data providers; DESELECTED by default (P0-T2)",
@@ -47,6 +49,12 @@ markers = [
 python_version = "3.14"
 strict = true
 files = ["src"]
+
+[[tool.mypy.overrides]]
+# yfinance 1.7.0 ships no py.typed / stubs (verified); targeted override instead
+# of blanket per-line ignores.
+module = "yfinance"
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
