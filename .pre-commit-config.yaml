@@ -1,0 +1,32 @@
+# P0-T2: pre-commit hooks for the nlbt project.
+# Lives at the REPO ROOT because pre-commit always runs from the repo root,
+# regardless of where the project folder sits (nlbt/ here).
+#
+# All hooks are `language: system` and reuse the uv-LOCKED tools via
+# `uv run --project nlbt` — the same ruff/mypy versions `make all` runs.
+# No hook downloads anything (no remote repos), and `files: ^nlbt/` keeps
+# this repo's other projects untouched. Paths are relative to the REPO ROOT
+# because pre-commit always runs hooks from the repo root.
+#
+# Install once per clone:  uv run --project nlbt pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: nlbt-ruff-check
+        name: nlbt ruff check
+        entry: uv run --project nlbt ruff check nlbt/src nlbt/tests
+        language: system
+        pass_filenames: false
+        files: ^nlbt/.*\.py$
+      - id: nlbt-ruff-format
+        name: nlbt ruff format --check
+        entry: uv run --project nlbt ruff format --check nlbt/src nlbt/tests
+        language: system
+        pass_filenames: false
+        files: ^nlbt/.*\.py$
+      - id: nlbt-mypy
+        name: nlbt mypy --strict (src/)
+        entry: uv run --project nlbt mypy --config-file nlbt/pyproject.toml nlbt/src/nlbt
+        language: system
+        pass_filenames: false
+        files: ^nlbt/.*\.py$

@@ -1,0 +1,13 @@
+# nlbt project-local ignores (root .gitignore keeps the global rules)
+
+# virtualenvs and caches
+.venv/
+.probe*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# build artifacts
+dist/
+build/
+*.egg-info/

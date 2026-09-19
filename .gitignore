@@ -36,6 +36,8 @@ __pycache__/
 test_*.py
 _test_*
 _test.txt
+# Exception: nlbt project tests are committed (narrow, P0-T1)
+!nlbt/tests/**
 
 # Result files
 btc_*.json
@@ -56,6 +58,9 @@ __gen.py
 _gen.py
 inst_bt_run.py
 inst_backtest.py
+
+# Uploaded trade chart screenshots
+journal_images/
 
 # Generated PDF/PNG reports
 *.pdf

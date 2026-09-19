@@ -1,0 +1,43 @@
+# P0-T2: CI gate. Runs the same `make all` the agent gate requires, on every
+# push/PR that touches the nlbt project. The nlbt project lives in the nlbt/
+# subfolder of this repository, hence the working-directory and path filters.
+name: nlbt-ci
+
+on:
+  pull_request:
+    paths: ["nlbt/**", ".github/workflows/nlbt-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["nlbt/**", ".github/workflows/nlbt-ci.yml"]
+
+jobs:
+  make-all:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nlbt
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install everything from the lockfile (the one documented command)
+        run: uv sync --locked
+
+      - name: make all (lint + type + tests with coverage)
+        run: make all
+
+      - name: Enforce coverage floor (initial target; raised in later phases)
+        run: uv run coverage report --fail-under=80
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: nlbt/coverage.xml
+          if-no-files-found: ignore
