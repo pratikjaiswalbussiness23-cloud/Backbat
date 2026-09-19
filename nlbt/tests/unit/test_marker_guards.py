@@ -38,8 +38,16 @@ def _collect(marker: str | None) -> tuple[int, str]:
 
     No -q: quiet collect output shows only per-file counts, not test names.
     """
-    cmd = [sys.executable, "-m", "pytest", str(THIS_FILE), "--collect-only",
-           "--no-header", "-p", "no:cacheprovider"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(THIS_FILE),
+        "--collect-only",
+        "--no-header",
+        "-p",
+        "no:cacheprovider",
+    ]
     if marker is not None:
         cmd += ["-m", marker]
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT, check=False)

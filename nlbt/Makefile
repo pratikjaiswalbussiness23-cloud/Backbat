@@ -21,7 +21,7 @@ type:
 	$(UV) run mypy
 
 test:
-	$(UV) run pytest --cov --cov-report=term-missing
+	$(UV) run pytest --cov --cov-report=term-missing --cov-report=xml
 
 clean:
 	$(RM) -r .pytest_cache .mypy_cache .ruff_cache .coverage

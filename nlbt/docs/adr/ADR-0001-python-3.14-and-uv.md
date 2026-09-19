@@ -60,9 +60,11 @@
 | mypy (dev) | `--strict` on `src/` (§3.3) | MIT | pyright (rejected: §3.3 names mypy) |
 | pytest (dev) | Test runner (§3.3) | MIT | unittest (rejected: §3.3) |
 | pytest-cov (dev) | Coverage (P0-T2) | MIT | — |
+| pre-commit (dev) | Local git hooks running the locked ruff/mypy (P0-T2) | MIT | manual checks (rejected: humans forget) |
 
 ## Notes
 
+- This register is provisional until P0-T3 creates `docs/DEPENDENCIES.md`, which then becomes the required home of R12 entries.
 - No third-party *APIs* are called by code yet (the package is an empty scaffold), so `docs/verified_apis.md`
   has no entries yet; it is created in P0-T3 and will list every verified call from Phase 1 onward (R1).
 - The probe venv was deleted after recording results; the committed lockfile is the source of truth.
