@@ -11,3 +11,5 @@ Per ROADMAP.md §2A (R12): no new dependency without an entry here (purpose, lic
 | pyarrow | 25.0.1 (locked) | P1-T4: parquet engine for the bar cache (`DataFrame.to_parquet`/`read_parquet`). Already a `[project]` dependency since ADR-0001 — no new dependency added | Apache-2.0 (verified from installed dist metadata) | fastparquet (rejected: less maintained, pandas `engine='auto'` already prefers pyarrow); pickle files (FORBIDDEN: AGENTS.md bans pickle; not portable/schema-safe); plain CSV cache (rejected: lossy dtypes, slower) |
 
 P1-T6 (frequency.py): **no new dependency** — uses pandas 3.0.6 and pydantic 2.13.5, both registered above (APIs probed in verified_apis.md).
+
+P2-T1 (indicators/registry.py): **no new dependency** — pandas 3.0.6, numpy 2.5.3 and pydantic 2.13.5, all registered above; versions probed 2026-09-20 and recorded in verified_apis.md. The `indicators` package intentionally imports no network/LLM modules (import-boundary test P0-T3 applies).
