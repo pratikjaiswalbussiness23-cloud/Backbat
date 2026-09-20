@@ -21,3 +21,5 @@ P1-T6 (frequency.py): **no new dependency** — uses pandas 3.0.6 and pydantic 2
 P2-T1 (indicators/registry.py): **no new dependency** — pandas 3.0.6, numpy 2.5.3 and pydantic 2.13.5, all registered above; versions probed 2026-09-20 and recorded in verified_apis.md. The `indicators` package intentionally imports no network/LLM modules (import-boundary test P0-T3 applies).
 
 P2-T5 (oscillator.py): **no new dependency** — oracle remains `ta` 0.11.0 (dev-only, registered above; ATR/Stochastic/ADX probes + installed-source convention reads in verified_apis.md). Production code imports nothing beyond pandas/numpy/stdlib + nlbt's own `momentum._wilders_rma` and `trend._sma_vectorised` (no ta, no ewm).
+
+P2-T6 (channel.py + volume.py): **no new dependency** — oracle remains `ta` 0.11.0 (Donchian + OBV probes in verified_apis.md, including the include-current-bar and flat-close divergences, OQ-0026). Production code imports nothing beyond pandas/numpy/stdlib (highest/lowest are shift+rolling; OBV is an explicit loop).
