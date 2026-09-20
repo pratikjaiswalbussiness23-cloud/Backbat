@@ -14,6 +14,8 @@ Per ROADMAP.md §2A (R12): no new dependency without an entry here (purpose, lic
 
 P2-T3 (momentum.py): **no new dependency** — oracle remains `ta` 0.11.0 (dev-only, registered above; RSI/ROC probes in verified_apis.md). Production code imports nothing beyond pandas/numpy/stdlib.
 
+P2-T4 (volatility.py): **no new dependency** — oracle remains `ta` 0.11.0 (MACD + BBands probes in verified_apis.md, including the ddof=0 divergence, OQ-0020). Production code imports nothing beyond pandas/numpy/stdlib + nlbt's own trend.py.
+
 P1-T6 (frequency.py): **no new dependency** — uses pandas 3.0.6 and pydantic 2.13.5, both registered above (APIs probed in verified_apis.md).
 
 P2-T1 (indicators/registry.py): **no new dependency** — pandas 3.0.6, numpy 2.5.3 and pydantic 2.13.5, all registered above; versions probed 2026-09-20 and recorded in verified_apis.md. The `indicators` package intentionally imports no network/LLM modules (import-boundary test P0-T3 applies).
