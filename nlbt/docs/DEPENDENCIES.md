@@ -12,6 +12,8 @@ Per ROADMAP.md §2A (R12): no new dependency without an entry here (purpose, lic
 | ta (bukosabino) | 0.11.0 (locked, dev-only) | P2-T2: oracle library for indicator tests (`ta.trend.SMAIndicator` / `EMAIndicator`) — the task's named oracle `pandas-ta` could not be added (see below). Dev-only: never imported by `src/`; the import-boundary test would catch it | MIT (verified from installed dist metadata: license field + classifier) | `pandas-ta` (task-named; REJECTED — uninstallable, see next row); manual constants copied from a website (FORBIDDEN: not an independent oracle); no oracle (rejected: ROADMAP P2-T2 acceptance mandates a reference-library comparison) |
 | pandas-ta | NOT INSTALLED | Task named it as oracle. Attempted `uv add pandas-ta --dev` on 2026-09-20 — resolution fails: pandas-ta pins `numba==0.61.2` which requires `numpy>=1.24,<2.3`; nlbt requires `numpy>=2.5`. Rejected installing a downgraded numpy (P1 data layer + performance). Recorded as OQ-0015 for the owner | — | `ta` chosen instead (above) |
 
+P2-T3 (momentum.py): **no new dependency** — oracle remains `ta` 0.11.0 (dev-only, registered above; RSI/ROC probes in verified_apis.md). Production code imports nothing beyond pandas/numpy/stdlib.
+
 P1-T6 (frequency.py): **no new dependency** — uses pandas 3.0.6 and pydantic 2.13.5, both registered above (APIs probed in verified_apis.md).
 
 P2-T1 (indicators/registry.py): **no new dependency** — pandas 3.0.6, numpy 2.5.3 and pydantic 2.13.5, all registered above; versions probed 2026-09-20 and recorded in verified_apis.md. The `indicators` package intentionally imports no network/LLM modules (import-boundary test P0-T3 applies).
