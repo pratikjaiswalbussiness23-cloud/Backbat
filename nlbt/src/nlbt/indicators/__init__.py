@@ -1,4 +1,9 @@
-"""Indicator library: registry/base API (P2-T1) + registered indicators (P2-T2+)."""
+"""Indicator library: registry/base API (P2-T1) + registered indicators.
+
+Importing this package REGISTERS the built-in indicators (sma, ema — P2-T2)
+in the global :data:`REGISTRY`; registration happens at import time by
+design (P2-T1 singleton contract).
+"""
 
 from nlbt.indicators.registry import (
     REGISTRY,
@@ -8,12 +13,15 @@ from nlbt.indicators.registry import (
     register_indicator,
     validate_indicator_params,
 )
+from nlbt.indicators.trend import compute_ema, compute_sma
 
 __all__ = [
     "REGISTRY",
     "IndicatorSpec",
     "ParamSpec",
     "Registry",
+    "compute_ema",
+    "compute_sma",
     "register_indicator",
     "validate_indicator_params",
 ]
