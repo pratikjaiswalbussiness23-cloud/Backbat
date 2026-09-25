@@ -1,0 +1,288 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-09-25T09:18:43.316221+00:00",
+  "indicators": {
+    "adx": {
+      "description": "Average directional index: +DM/-DM per the strict-dominance rule (equal moves -> both 0), Wilder running-sum smoothing seeded with the first `period` values; +DI/-DI = 100*smoothed_DM/smoothed_TR (smTR == 0 -> DI = 0); DX = 100*|+DI - -DI|/(+DI + -DI) (denominator 0 -> DX = 0); ADX = Wilder smoothing of DX with the first valid output at index 2*period-1; all outputs in [0, 100].",
+      "outputs": [
+        "adx",
+        "plus_di",
+        "minus_di"
+      ],
+      "allowed_sources": [
+        "close"
+      ],
+      "warmup_default": 27,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 100.0,
+          "default": 14,
+          "description": "Wilder smoothing period for DM/TR/DI/ADX; inclusive bounds [2, 100]."
+        }
+      }
+    },
+    "atr": {
+      "description": "Average true range: TR = max(high-low, |high-prev_close|, |low-prev_close|), TR[0] = NaN; Wilder smoothing alpha=1/period seeded with the SMA of TR[1..period]; first valid output at index period; output >= 0, never inf.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "close"
+      ],
+      "warmup_default": 14,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 100.0,
+          "default": 14,
+          "description": "Lookback bars for Wilder ATR; inclusive bounds [2, 100]."
+        }
+      }
+    },
+    "bbands": {
+      "description": "Bollinger Bands: middle = SMA(period), upper/lower = middle ± k * sample-std(period, ddof=1) per ADR-0004; warmup = period-1.",
+      "outputs": [
+        "upper",
+        "middle",
+        "lower"
+      ],
+      "allowed_sources": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "warmup_default": 19,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 500.0,
+          "default": 20,
+          "description": "SMA/std window; inclusive bounds [2, 500]."
+        },
+        "k": {
+          "type": "float",
+          "minimum": 0.1,
+          "maximum": 10.0,
+          "default": 2.0,
+          "description": "Band width in standard deviations; inclusive [0.1, 10]."
+        }
+      }
+    },
+    "ema": {
+      "description": "Exponential moving average: alpha = 2/(period+1), seeded with the SMA of the first `period` values (ADR-0002); first valid output at index period-1.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "warmup_default": 19,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 500.0,
+          "default": 20,
+          "description": "Window length in bars; inclusive bounds [2, 500]."
+        }
+      }
+    },
+    "highest": {
+      "description": "Highest high of the PREVIOUS `period` bars (current bar excluded): highest[t] = max(high[t-period..t-1]); first valid output at index period. Breakout signals compare close[t] > highest[t] using only past highs — no lookahead by construction.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "high"
+      ],
+      "warmup_default": 20,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 500.0,
+          "default": 20,
+          "description": "Lookback bars (PREVIOUS bars only, current excluded); inclusive bounds [2, 500]."
+        }
+      }
+    },
+    "lowest": {
+      "description": "Lowest low of the PREVIOUS `period` bars (current bar excluded): lowest[t] = min(low[t-period..t-1]); first valid output at index period. Breakdown signals compare close[t] < lowest[t] using only past lows — no lookahead by construction.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "low"
+      ],
+      "warmup_default": 20,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 500.0,
+          "default": 20,
+          "description": "Lookback bars (PREVIOUS bars only, current excluded); inclusive bounds [2, 500]."
+        }
+      }
+    },
+    "macd": {
+      "description": "MACD: line = EMA(fast) - EMA(slow), signal = EMA(line, signal), hist = line - signal; SMA-seeded EMA per ADR-0002; warmup = slow + signal - 2; source close only.",
+      "outputs": [
+        "line",
+        "signal",
+        "hist"
+      ],
+      "allowed_sources": [
+        "close"
+      ],
+      "warmup_default": 33,
+      "params": {
+        "fast": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 200.0,
+          "default": 12,
+          "description": "Fast EMA length; inclusive bounds [2, 200]."
+        },
+        "slow": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 200.0,
+          "default": 26,
+          "description": "Slow EMA length; inclusive bounds [2, 200]."
+        },
+        "signal": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 200.0,
+          "default": 9,
+          "description": "Signal EMA length on the MACD line; inclusive [2, 200]."
+        }
+      }
+    },
+    "obv": {
+      "description": "On-balance volume: OBV[0] = volume[0]; up bars add volume, down bars subtract it, FLAT closes carry the previous value (neutral — classic Wilder convention, NOT ta's flat-adds convention); valid from the first bar (warmup 0); can be negative.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "close"
+      ],
+      "warmup_default": 0,
+      "params": {}
+    },
+    "roc": {
+      "description": "Rate of change: (price[t]/price[t-period] - 1) * 100; zero or NaN base price -> NaN (never inf); first valid output at index period.",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "warmup_default": 10,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 1.0,
+          "maximum": 500.0,
+          "default": 10,
+          "description": "Lookback bars for rate of change; inclusive bounds [1, 500]."
+        }
+      }
+    },
+    "rsi": {
+      "description": "Relative strength index: Wilder smoothing alpha=1/period, seeded with the SMA of the first `period` gains/losses (ADR-0003); first valid output at index period; flat prices -> 50, only gains -> 100, only losses -> 0; output always in [0, 100].",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "warmup_default": 14,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 100.0,
+          "default": 14,
+          "description": "Lookback bars for Wilder RSI; inclusive bounds [2, 100]."
+        }
+      }
+    },
+    "sma": {
+      "description": "Simple moving average: mean of the last `period` source values; first valid output at index period-1 (ADR-0002).",
+      "outputs": [
+        "value"
+      ],
+      "allowed_sources": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "warmup_default": 19,
+      "params": {
+        "period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 500.0,
+          "default": 20,
+          "description": "Window length in bars; inclusive bounds [2, 500]."
+        }
+      }
+    },
+    "stoch": {
+      "description": "Stochastic oscillator: %K = 100*(close-lowest_low)/(highest_high-lowest_low) over k_period bars; smooth_period > 1 SMA-smooths %K BEFORE %D; %D = SMA(%K, d_period); flat windows (HH == LL) -> %K = 50; outputs k and d, first valid at k_period+smooth_period+d_period-3.",
+      "outputs": [
+        "k",
+        "d"
+      ],
+      "allowed_sources": [
+        "close"
+      ],
+      "warmup_default": 17,
+      "params": {
+        "k_period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 100.0,
+          "default": 14,
+          "description": "Raw %K lookback bars; inclusive bounds [2, 100]."
+        },
+        "d_period": {
+          "type": "int",
+          "minimum": 2.0,
+          "maximum": 100.0,
+          "default": 3,
+          "description": "%D = SMA(%K, d_period); inclusive bounds [2, 100]."
+        },
+        "smooth_period": {
+          "type": "int",
+          "minimum": 1.0,
+          "maximum": 10.0,
+          "default": 3,
+          "description": "SMA smoothing applied to raw %K before %D (1 = no smoothing); inclusive bounds [1, 10]."
+        }
+      }
+    }
+  }
+}

@@ -26,3 +26,5 @@ P2-T5 (oscillator.py): **no new dependency** — oracle remains `ta` 0.11.0 (dev
 P2-T6 (channel.py + volume.py): **no new dependency** — oracle remains `ta` 0.11.0 (Donchian + OBV probes in verified_apis.md, including the include-current-bar and flat-close divergences, OQ-0026). Production code imports nothing beyond pandas/numpy/stdlib (highest/lowest are shift+rolling; OBV is an explicit loop).
 
 P2-T7 (tests/property/test_indicator_truncation.py): **hypothesis 6.168.1 added dev-only** (task step 1 mandate: "Verify hypothesis is installed… If not: uv add hypothesis --dev"). Registered in the table above; probes in verified_apis.md. Production code unchanged — the task forbids new indicator logic, and the tests import only the existing registry/compute functions.
+
+P2-T8 (indicators/generate_docs.py): **no new dependency** — stdlib `json` + `datetime` + `pathlib` only (probes in verified_apis.md). The generator renders from the P2-T1 registry API (`Registry.json_schema()`); no third-party code touched.

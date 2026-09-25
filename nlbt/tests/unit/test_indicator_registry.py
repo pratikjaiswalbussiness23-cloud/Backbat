@@ -293,6 +293,8 @@ def test_register_indicator_helper_targets_global_singleton() -> None:
     is passed (the path P2-T2+ indicator users will hit).
 
     Uses a name unique to this file so it cannot collide with anything else.
+    Cleans up after itself to avoid polluting the global REGISTRY for other
+    tests that read the registry (e.g. docs staleness tests).
     """
     helper_spec = IndicatorSpec(
         name="dummy_global_path",
@@ -313,10 +315,15 @@ def test_register_indicator_helper_targets_global_singleton() -> None:
         ),
         description="Registered only to exercise the global path",
     )
-    register_indicator(helper_spec)
-    assert "dummy_global_path" in REGISTRY_VIA_MODULE.list_indicators()
-    # Default-registry path (registry=None): 3 is within [2, 500] → accepted.
-    assert validate_indicator_params("dummy_global_path", {"period": 3}) == {"period": 3}
+    try:
+        register_indicator(helper_spec)
+        assert "dummy_global_path" in REGISTRY_VIA_MODULE.list_indicators()
+        # Default-registry path (registry=None): 3 is within [2, 500] → accepted.
+        assert validate_indicator_params("dummy_global_path", {"period": 3}) == {"period": 3}
+    finally:
+        # Cleanup: remove the dummy so it does not pollute the global REGISTRY
+        # for subsequent tests that enumerate all registered indicators.
+        REGISTRY_VIA_MODULE._indicators.pop("dummy_global_path", None)
 
 
 # 16 (extra: bounds are inclusive) --------------------------------------------
