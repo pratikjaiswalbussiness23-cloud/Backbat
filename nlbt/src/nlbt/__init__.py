@@ -1,8 +1,8 @@
 """nlbt — natural-language trading strategy backtester.
 
-Status: Phase 1 (data layer) complete; Phase 2 started (P2-T1 indicator
-registry). Ground rule (ROADMAP §0.3 C1): the LLM only translates; it never
-computes numbers or runs code.
+Status: Phase 1 (data layer) and Phase 2 (indicator library) complete;
+Phase 3 started (P3-T1 StrategySpec models). Ground rule (ROADMAP §0.3 C1):
+the LLM only translates; it never computes numbers or runs code.
 """
 
 from nlbt.config import Config, get_config, reset_config
@@ -19,6 +19,7 @@ from nlbt.indicators.registry import (
     validate_indicator_params,
 )
 from nlbt.logging_config import SecretRedactionFilter, setup_logging
+from nlbt.spec.models import StrategySpec
 
 __version__ = "0.1.0"
 
@@ -34,6 +35,7 @@ __all__ = [
     "ParamSpec",
     "Registry",
     "SecretRedactionFilter",
+    "StrategySpec",
     "get_config",
     "register_indicator",
     "reset_config",
