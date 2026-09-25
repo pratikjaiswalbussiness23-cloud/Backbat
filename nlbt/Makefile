@@ -5,7 +5,7 @@
 
 UV ?= uv
 
-.PHONY: all lint type test generate-docs sync clean
+.PHONY: all lint type test generate-docs generate-schema sync clean
 
 all: lint type test
 	@echo "== make all: PASSED =="
@@ -29,6 +29,12 @@ test:
 # tests/unit/test_indicators_docs.py (they fail if these files drift).
 generate-docs:
 	$(UV) run python -m nlbt.indicators.generate_docs
+
+# P3-T3: regenerate docs/spec_schema.json from the spec models + registry.
+# Run manually or as a CI pre-step — NOT part of `all`; freshness on every
+# PR is enforced by the staleness test in tests/unit/test_spec_schema.py.
+generate-schema:
+	$(UV) run python -m nlbt.spec.schema
 
 clean:
 	$(RM) -r .pytest_cache .mypy_cache .ruff_cache .coverage

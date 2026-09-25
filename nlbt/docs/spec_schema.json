@@ -1,0 +1,721 @@
+{
+  "$defs": {
+    "AllRule": {
+      "additionalProperties": false,
+      "description": "Logical AND over ``conditions`` (tagged ``kind: \"all\"``).",
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllRule",
+                "any": "#/$defs/AnyRule",
+                "condition": "#/$defs/Condition",
+                "not": "#/$defs/NotRule"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/AllRule"
+              },
+              {
+                "$ref": "#/$defs/AnyRule"
+              },
+              {
+                "$ref": "#/$defs/NotRule"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "all",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conditions",
+        "kind"
+      ],
+      "title": "AllRule",
+      "type": "object"
+    },
+    "AnyRule": {
+      "additionalProperties": false,
+      "description": "Logical OR over ``conditions`` (tagged ``kind: \"any\"``).",
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllRule",
+                "any": "#/$defs/AnyRule",
+                "condition": "#/$defs/Condition",
+                "not": "#/$defs/NotRule"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/AllRule"
+              },
+              {
+                "$ref": "#/$defs/AnyRule"
+              },
+              {
+                "$ref": "#/$defs/NotRule"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "any",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conditions",
+        "kind"
+      ],
+      "title": "AnyRule",
+      "type": "object"
+    },
+    "Assumption": {
+      "additionalProperties": false,
+      "description": "One disclosed assumption (parser-populated, §4.4): what field was\ndefaulted, to what value, and why.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "reason"
+      ],
+      "title": "Assumption",
+      "type": "object"
+    },
+    "Capital": {
+      "additionalProperties": false,
+      "description": "Starting capital; must be positive (§4.1 ``capital.initial > 0``).",
+      "properties": {
+        "initial": {
+          "exclusiveMinimum": 0,
+          "title": "Initial",
+          "type": "number"
+        },
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "initial"
+      ],
+      "title": "Capital",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "``left <op> right`` — operands discriminated on ``kind``.\n\n``mode=\"before\"`` field validators lift the §4.2 shorthand operands\n(bare strings/numbers — see module docstring / OQ-0033) BEFORE the\ndiscriminated union extracts its tag.",
+      "properties": {
+        "kind": {
+          "const": "condition",
+          "title": "Kind",
+          "type": "string"
+        },
+        "left": {
+          "discriminator": {
+            "mapping": {
+              "indicator": "#/$defs/IndicatorOperand",
+              "number": "#/$defs/NumberOperand",
+              "raw_column": "#/$defs/RawColumnOperand"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/NumberOperand"
+            },
+            {
+              "$ref": "#/$defs/IndicatorOperand"
+            },
+            {
+              "$ref": "#/$defs/RawColumnOperand"
+            }
+          ],
+          "title": "Left"
+        },
+        "op": {
+          "enum": [
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "crosses_above",
+            "crosses_below"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "right": {
+          "discriminator": {
+            "mapping": {
+              "indicator": "#/$defs/IndicatorOperand",
+              "number": "#/$defs/NumberOperand",
+              "raw_column": "#/$defs/RawColumnOperand"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/NumberOperand"
+            },
+            {
+              "$ref": "#/$defs/IndicatorOperand"
+            },
+            {
+              "$ref": "#/$defs/RawColumnOperand"
+            }
+          ],
+          "title": "Right"
+        }
+      },
+      "required": [
+        "kind",
+        "left",
+        "op",
+        "right"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Execution": {
+      "additionalProperties": false,
+      "description": "Fill convention and costs; only ``next_open`` exists in v1 (§4.1).",
+      "properties": {
+        "fill": {
+          "const": "next_open",
+          "default": "next_open",
+          "title": "Fill",
+          "type": "string"
+        },
+        "fee_bps": {
+          "default": 5.0,
+          "minimum": 0,
+          "title": "Fee Bps",
+          "type": "number"
+        },
+        "slippage_bps": {
+          "default": 5.0,
+          "minimum": 0,
+          "title": "Slippage Bps",
+          "type": "number"
+        },
+        "fixed_fee": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Fixed Fee",
+          "type": "number"
+        }
+      },
+      "title": "Execution",
+      "type": "object"
+    },
+    "IndicatorDef": {
+      "additionalProperties": false,
+      "description": "One indicator usage: ``type`` names a registry indicator (the P3-T2\nvalidator checks existence/bounds against the registry), ``params`` are\nforwarded, ``source`` is the input OHLCV column.",
+      "properties": {
+        "type": {
+          "enum": [
+            "adx",
+            "atr",
+            "bbands",
+            "ema",
+            "highest",
+            "lowest",
+            "macd",
+            "obv",
+            "roc",
+            "rsi",
+            "sma",
+            "stoch"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Params",
+          "type": "object"
+        },
+        "source": {
+          "default": "close",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "IndicatorDef",
+      "type": "object"
+    },
+    "IndicatorOperand": {
+      "additionalProperties": false,
+      "description": "A reference to one indicator output: name (registry identifier) and\nthe output column (e.g. ``value``, ``line``), read ``lag`` bars back.\n\n``output`` defaults to ``\"value\"`` because the §4.2 grammar allows a bare\nindicator name and a ``{\"name\": ..., \"lag\": ...}`` dict — both meaning\nthe indicator's primary output (§4.3 lists ``value`` first for every\nsingle-output indicator). Whether the referenced indicator actually HAS\nthat output is reference resolution — the P3-T2 semantic validator's\njob against the live registry, not a schema-level check (OQ-0034).",
+      "properties": {
+        "kind": {
+          "const": "indicator",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 32,
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "output": {
+          "default": "value",
+          "title": "Output",
+          "type": "string"
+        },
+        "lag": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Lag",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "title": "IndicatorOperand",
+      "type": "object"
+    },
+    "NotRule": {
+      "additionalProperties": false,
+      "description": "Logical NOT over exactly one node (tagged ``kind: \"not\"``).",
+      "properties": {
+        "kind": {
+          "const": "not",
+          "title": "Kind",
+          "type": "string"
+        },
+        "condition": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllRule",
+              "any": "#/$defs/AnyRule",
+              "condition": "#/$defs/Condition",
+              "not": "#/$defs/NotRule"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/AllRule"
+            },
+            {
+              "$ref": "#/$defs/AnyRule"
+            },
+            {
+              "$ref": "#/$defs/NotRule"
+            }
+          ],
+          "title": "Condition"
+        }
+      },
+      "required": [
+        "kind",
+        "condition"
+      ],
+      "title": "NotRule",
+      "type": "object"
+    },
+    "NumberOperand": {
+      "additionalProperties": false,
+      "description": "A literal number operand: ``{\"kind\": \"number\", \"value\": 3.5}``.",
+      "properties": {
+        "kind": {
+          "const": "number",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "NumberOperand",
+      "type": "object"
+    },
+    "Period": {
+      "additionalProperties": false,
+      "description": "Backtest window: ``start < end <= today`` (clock via ``_get_today``).\n\nThe date fields override the class-level ``strict=True`` with\n``Field(strict=False)`` (probed on 2.13.5): Appendix C fixtures are JSON\nwith ISO date strings, which STRICT dates reject. This is parsing of an\nexplicitly-formatted date literal, not silent coercion of a wrong scalar\ntype (no number/bool ever becomes a date).",
+      "properties": {
+        "start": {
+          "format": "date",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "format": "date",
+          "title": "End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "Period",
+      "type": "object"
+    },
+    "RawColumnOperand": {
+      "additionalProperties": false,
+      "description": "A raw OHLCV column reference (one of open/high/low/close/volume).",
+      "properties": {
+        "kind": {
+          "const": "raw_column",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "title": "RawColumnOperand",
+      "type": "object"
+    },
+    "Risk": {
+      "additionalProperties": false,
+      "description": "Risk exits; every field optional with §4.1's open-interval bounds.\n\nThe bounds ride on the fields (strict + gt/lt through ``X | None``,\nprobed): ``0 < stop_loss_pct < 100``, ``take_profit_pct > 0``,\n``0 < trailing_stop_pct < 100``, ``max_holding_bars >= 1``.",
+      "properties": {
+        "stop_loss_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 100,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Loss Pct"
+        },
+        "take_profit_pct": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Take Profit Pct"
+        },
+        "trailing_stop_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 100,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trailing Stop Pct"
+        },
+        "max_holding_bars": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Holding Bars"
+        }
+      },
+      "title": "Risk",
+      "type": "object"
+    },
+    "Rules": {
+      "additionalProperties": false,
+      "description": "Entry/exit rule sets (exit optional — §4.1 row ``rules.exit_long``).\n\n``mode=\"before\"`` field validators lift the §4.2 shorthand rule dicts\n(``{\"all\": [...]}`` → ``{\"kind\": \"all\", \"conditions\": [...]}``)\nBEFORE the discriminated union extracts its tag — a discriminated union\nreads the tag off the raw input (probed: pydantic 2.13.5 raises\n``union_tag_not_found`` before any class-level validator could run), so\nclass validators cannot do this lifting (OQ-0033).",
+      "properties": {
+        "entry_long": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllRule",
+              "any": "#/$defs/AnyRule",
+              "condition": "#/$defs/Condition",
+              "not": "#/$defs/NotRule"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/AllRule"
+            },
+            {
+              "$ref": "#/$defs/AnyRule"
+            },
+            {
+              "$ref": "#/$defs/NotRule"
+            }
+          ],
+          "title": "Entry Long"
+        },
+        "exit_long": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "all": "#/$defs/AllRule",
+                  "any": "#/$defs/AnyRule",
+                  "condition": "#/$defs/Condition",
+                  "not": "#/$defs/NotRule"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Condition"
+                },
+                {
+                  "$ref": "#/$defs/AllRule"
+                },
+                {
+                  "$ref": "#/$defs/AnyRule"
+                },
+                {
+                  "$ref": "#/$defs/NotRule"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Long"
+        }
+      },
+      "required": [
+        "entry_long"
+      ],
+      "title": "Rules",
+      "type": "object"
+    },
+    "Sizing": {
+      "additionalProperties": false,
+      "description": "Position sizing. v1 bounds ``value > 0`` (method-specific ranges —\ne.g. percent ≤ 100 — are the P3-T2 semantic validator's business).",
+      "properties": {
+        "method": {
+          "enum": [
+            "percent_of_equity",
+            "fixed_cash",
+            "fixed_shares",
+            "risk_per_trade"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "value": {
+          "exclusiveMinimum": 0,
+          "title": "Value",
+          "type": "number"
+        },
+        "allow_fractional": {
+          "default": true,
+          "title": "Allow Fractional",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "method",
+        "value"
+      ],
+      "title": "Sizing",
+      "type": "object"
+    },
+    "Universe": {
+      "additionalProperties": false,
+      "description": "Tradable symbols; v1: exactly ONE symbol, interval ``1d`` only.",
+      "properties": {
+        "symbols": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Symbols",
+          "type": "array"
+        },
+        "interval": {
+          "const": "1d",
+          "default": "1d",
+          "title": "Interval",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbols"
+      ],
+      "title": "Universe",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The complete, validated strategy specification (§4.1).\n\nCross-field checks (model_validator mode=\"after\"):\n* spec_version == \"1.0\", name length, v1 single symbol,\n* indicator-name collisions/reserved words,\n* positive capital/sizing, non-negative execution costs.\nField-level checks live on the component models (Universe/Period/…);\nthey run automatically because StrategySpec embeds them.",
+  "properties": {
+    "spec_version": {
+      "const": "1.0",
+      "title": "Spec Version",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 120,
+      "title": "Name",
+      "type": "string"
+    },
+    "source_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Text"
+    },
+    "universe": {
+      "$ref": "#/$defs/Universe"
+    },
+    "period": {
+      "$ref": "#/$defs/Period"
+    },
+    "indicators": {
+      "additionalProperties": {
+        "$ref": "#/$defs/IndicatorDef"
+      },
+      "default": {},
+      "title": "Indicators",
+      "type": "object"
+    },
+    "rules": {
+      "$ref": "#/$defs/Rules"
+    },
+    "risk": {
+      "$ref": "#/$defs/Risk",
+      "default": {
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null,
+        "max_holding_bars": null
+      }
+    },
+    "sizing": {
+      "$ref": "#/$defs/Sizing"
+    },
+    "execution": {
+      "$ref": "#/$defs/Execution",
+      "default": {
+        "fill": "next_open",
+        "fee_bps": 5.0,
+        "slippage_bps": 5.0,
+        "fixed_fee": 0.0
+      }
+    },
+    "capital": {
+      "$ref": "#/$defs/Capital"
+    },
+    "assumptions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Assumption"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "unsupported": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unsupported",
+      "type": "array"
+    }
+  },
+  "required": [
+    "spec_version",
+    "name",
+    "universe",
+    "period",
+    "rules",
+    "sizing",
+    "capital"
+  ],
+  "title": "StrategySpec",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-nlbt-version": "1.0",
+  "x-nlbt-generated-at": "2026-09-25T14:38:14.000994+00:00"
+}
