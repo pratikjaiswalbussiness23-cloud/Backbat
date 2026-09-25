@@ -1,11 +1,12 @@
 """StrategySpec schema models (P3-T1), semantic validator (P3-T2), JSON
-Schema export (P3-T3) and canonicalisation/hashing (P3-T4).
+Schema export (P3-T3), canonicalisation/hashing (P3-T4) and the
+deterministic English renderer (P3-T5).
 
 Importing this package exposes the validated spec models, ``validate_spec``
 (the semantic layer that cross-references the indicator registry), the
-schema generation/validation helpers, and the canonical-form/hash functions
-used by the §4.6 run manifest. Phase 3 continues with the deterministic
-renderer (P3-T5).
+schema generation/validation helpers, the canonical-form/hash functions
+used by the §4.6 run manifest, and ``render_spec`` (the user's
+confirmation gate). This completes Phase 3's spec toolchain.
 """
 
 from typing import Any
@@ -43,6 +44,7 @@ from nlbt.spec.models import (
     Universe,
     rule_depth,
 )
+from nlbt.spec.render import render_rule, render_spec
 from nlbt.spec.validate import (
     SemanticError,
     SemanticValidationResult,
@@ -102,6 +104,8 @@ __all__ = [
     "canonicalise",
     "generate_spec_schema",
     "normalise_number",
+    "render_rule",
+    "render_spec",
     "rule_depth",
     "spec_hash_full",
     "spec_hash_logic",
