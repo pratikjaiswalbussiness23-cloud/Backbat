@@ -1,12 +1,15 @@
 """StrategySpec schema models (P3-T1), semantic validator (P3-T2), JSON
-Schema export (P3-T3), canonicalisation/hashing (P3-T4) and the
-deterministic English renderer (P3-T5).
+Schema export (P3-T3), canonicalisation/hashing (P3-T4), the
+deterministic English renderer (P3-T5) and the defaults registry +
+phrase table (P3-T6).
 
 Importing this package exposes the validated spec models, ``validate_spec``
 (the semantic layer that cross-references the indicator registry), the
 schema generation/validation helpers, the canonical-form/hash functions
-used by the §4.6 run manifest, and ``render_spec`` (the user's
-confirmation gate). This completes Phase 3's spec toolchain.
+used by the §4.6 run manifest, ``render_spec`` (the user's
+confirmation gate) and the §4.4 defaults registry (``DEFAULTS``,
+``MUST_ASK``, ``PHRASE_TABLE``) -- the single source of truth for every
+defaultable value.
 """
 
 from typing import Any
@@ -19,6 +22,15 @@ from nlbt.spec.canonical import (
     normalise_number,
     spec_hash_full,
     spec_hash_logic,
+)
+from nlbt.spec.defaults import (
+    DEFAULTS,
+    MUST_ASK,
+    PHRASE_TABLE,
+    NlbtDefaults,
+    PhraseEntry,
+    get_phrase,
+    resolve_date_range,
 )
 from nlbt.spec.models import (
     AllRule,
@@ -73,7 +85,10 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "DEFAULTS",
     "GENERATED_AT_KEY",
+    "MUST_ASK",
+    "PHRASE_TABLE",
     "VERSION_KEY",
     "AllRule",
     "AnyRule",
@@ -83,12 +98,14 @@ __all__ = [
     "Execution",
     "IndicatorDef",
     "IndicatorOperand",
+    "NlbtDefaults",
     "Node",
     "NotRule",
     "NumberOperand",
     "Op",
     "Operand",
     "Period",
+    "PhraseEntry",
     "RawColumnOperand",
     "Risk",
     "Rules",
@@ -103,9 +120,11 @@ __all__ = [
     "canonical_logic_json",
     "canonicalise",
     "generate_spec_schema",
+    "get_phrase",
     "normalise_number",
     "render_rule",
     "render_spec",
+    "resolve_date_range",
     "rule_depth",
     "spec_hash_full",
     "spec_hash_logic",
