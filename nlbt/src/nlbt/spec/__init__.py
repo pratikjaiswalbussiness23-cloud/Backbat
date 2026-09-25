@@ -1,8 +1,10 @@
-"""StrategySpec schema models (ROADMAP P3-T1, §4.1-§4.2).
+"""StrategySpec schema models (ROADMAP P3-T1) and semantic validator (P3-T2).
 
-Importing this package exposes the validated spec models. Phase 3 builds
-the semantic validator (P3-T2), JSON Schema export (P3-T3), canonicalisation
-(P3-T4) and the deterministic renderer (P3-T5) on top of these models.
+Importing this package exposes the validated spec models and
+``validate_spec``, the semantic layer that cross-references the indicator
+registry (P3-T2). Phase 3 continues with JSON Schema export (P3-T3),
+canonicalisation (P3-T4) and the deterministic renderer (P3-T5) on top of
+these.
 """
 
 from nlbt.spec.models import (
@@ -29,6 +31,11 @@ from nlbt.spec.models import (
     Universe,
     rule_depth,
 )
+from nlbt.spec.validate import (
+    SemanticError,
+    SemanticValidationResult,
+    validate_spec,
+)
 
 __all__ = [
     "AllRule",
@@ -48,9 +55,12 @@ __all__ = [
     "RawColumnOperand",
     "Risk",
     "Rules",
+    "SemanticError",
+    "SemanticValidationResult",
     "Sizing",
     "SizingMethod",
     "StrategySpec",
     "Universe",
     "rule_depth",
+    "validate_spec",
 ]
