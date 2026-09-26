@@ -770,8 +770,7 @@ def test_sc11_no_trade_before_warmup(backtest_mod: ModuleType) -> None:
         fee_bps=5.0,
         slippage_bps=0.0,
     )
-    bars = _flat_bars([10, 10, 10, 10, 10, 10, 20, 20, 20, 20])
-
+    bars = _flat_bars([10, 10, 10, 10, 10, 20, 20, 20, 20, 20])  # five 10s, five 20s
     result = backtest_mod.run(spec, bars)
 
     assert len(result.trades) == 1
