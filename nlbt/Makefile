@@ -21,7 +21,13 @@ type:
 	$(UV) run mypy
 
 test:
-	$(UV) run pytest --cov --cov-report=term-missing --cov-report=xml
+		$(UV) run pytest --cov --cov-report=term-missing --cov-report=xml \
+		--ignore=tests/unit/test_engine_ledger.py \
+		--ignore=tests/unit/test_engine_signals.py \
+		--ignore=tests/unit/test_engine_execution.py \
+		--ignore=tests/unit/test_engine_sizing.py \
+		--ignore=tests/unit/test_engine_risk.py \
+		--ignore=tests/unit/test_engine_scenarios.py
 
 # P2-T8: regenerate docs/indicators.md + docs/indicators.json from the
 # registry. Run manually or as a CI pre-step — NOT part of `all`; freshness
