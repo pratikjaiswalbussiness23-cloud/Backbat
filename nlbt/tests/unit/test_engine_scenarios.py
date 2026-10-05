@@ -905,16 +905,21 @@ def _stub_bars() -> Bars:
 
 
 def _sma_spec() -> StrategySpec:
-    """Scale-invariant stub spec: entry close > sma5 (no absolute threshold)."""
+    """Scale-invariant stub spec: entry close > sma5 (no absolute threshold).
+
+    Owner fix 2026-10-05: this helper passed ``with_exit=False``, a kwarg
+    ``_spec`` does not accept (its parameter is ``exit_long``, default None),
+    so every test using it raised TypeError before touching the engine. The
+    intent — "no exit rule" — is the ``exit_long=None`` default, so the bogus
+    kwarg is simply dropped.
+    """
     return _spec(
         entry={"all": [{"left": "close", "op": ">", "right": "sma5"}]},
-        with_exit=False,
         indicators={"sma5": {"type": "sma", "params": {"period": 5}, "source": "close"}},
         slippage_bps=0.0,
     )
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i1_equity_identity_every_bar(backtest_mod: ModuleType) -> None:
     """I1 (§8.3): equity[t] = cash[t] + position_value[t] for every bar."""
     result = backtest_mod.run(_stub_spec(), _stub_bars())
@@ -926,7 +931,6 @@ def test_i1_equity_identity_every_bar(backtest_mod: ModuleType) -> None:
         assert equity == pytest.approx(parts), f"identity broken at bar {i}"
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i2_cash_never_negative(backtest_mod: ModuleType) -> None:
     """I2 (§8.3): cash never negative for unlevered long-only."""
     result = backtest_mod.run(_stub_spec(), _stub_bars())
@@ -934,7 +938,6 @@ def test_i2_cash_never_negative(backtest_mod: ModuleType) -> None:
         assert float(cash) >= 0.0, f"cash negative at bar {i}: {cash}"
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i3_entry_time_strictly_after_signal_time(backtest_mod: ModuleType) -> None:
     """I3 (§8.3): every entry_time is strictly after its signal_time."""
     result = backtest_mod.run(_stub_spec(), _stub_bars())
@@ -943,7 +946,6 @@ def test_i3_entry_time_strictly_after_signal_time(backtest_mod: ModuleType) -> N
         assert trade.entry_time > trade.signal_time  # next bar or later
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i4_no_entry_before_warmup(backtest_mod: ModuleType) -> None:
     """I4 (§8.3): no entry before all used indicators are valid.
 
@@ -957,7 +959,6 @@ def test_i4_no_entry_before_warmup(backtest_mod: ModuleType) -> None:
         assert trade.signal_time >= bars.index[4]
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i5_trades_never_overlap(backtest_mod: ModuleType) -> None:
     """I5 (§8.3): trades never overlap for the same symbol (single position)."""
     bars = _make_bars(
@@ -980,7 +981,6 @@ def test_i5_trades_never_overlap(backtest_mod: ModuleType) -> None:
         assert prev.exit_time <= nxt.entry_time, "trades overlap"
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i6_exit_time_not_before_entry_time(backtest_mod: ModuleType) -> None:
     """I6 (§8.3): exit_time >= entry_time and bars_held >= 0."""
     result = backtest_mod.run(_stub_spec(), _stub_bars())
@@ -991,7 +991,6 @@ def test_i6_exit_time_not_before_entry_time(backtest_mod: ModuleType) -> None:
         assert trade.bars_held >= 0
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i7_net_pnl_sums_to_equity_change(backtest_mod: ModuleType) -> None:
     """I7 (§8.3): sum(net_pnl) = final_equity - initial_capital when flat.
 
@@ -1008,7 +1007,6 @@ def test_i7_net_pnl_sums_to_equity_change(backtest_mod: ModuleType) -> None:
     assert total == pytest.approx(final - initial, abs=CASH_TOL)
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i8_fill_price_within_bar_range(backtest_mod: ModuleType) -> None:
     """I8 (§8.3): pre-slippage fill price lies within [low, high] of its bar.
 
@@ -1025,7 +1023,6 @@ def test_i8_fill_price_within_bar_range(backtest_mod: ModuleType) -> None:
         assert float(exit_bar["low"]) <= trade.exit_price <= float(exit_bar["high"])
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i9_determinism_two_runs_identical(backtest_mod: ModuleType) -> None:
     """I9 (§8.3): two runs of the same spec+data give identical results."""
     spec1, spec2 = _stub_spec(), _stub_spec()
@@ -1048,7 +1045,6 @@ def test_i9_determinism_two_runs_identical(backtest_mod: ModuleType) -> None:
     assert [key(t) for t in first.trades] == [key(t) for t in second.trades]
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i10_higher_fees_never_higher_equity(backtest_mod: ModuleType) -> None:
     """I10 (§8.3): identical trade sequence, higher fees -> equity not higher."""
     bars = _stub_bars()
@@ -1060,7 +1056,6 @@ def test_i10_higher_fees_never_higher_equity(backtest_mod: ModuleType) -> None:
     assert final_high <= final_low + 1e-9
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i11_double_capital_same_timing_same_pct_returns(
     backtest_mod: ModuleType,
 ) -> None:
@@ -1079,7 +1074,6 @@ def test_i11_double_capital_same_timing_same_pct_returns(
     assert pct_base == pytest.approx(pct_double, abs=1e-9)
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i12_price_scaling_leaves_timing_unchanged(backtest_mod: ModuleType) -> None:
     """I12 (§8.3): scaling all prices by k > 0 leaves trade timing unchanged
     for specs WITHOUT absolute price thresholds.
@@ -1099,7 +1093,6 @@ def test_i12_price_scaling_leaves_timing_unchanged(backtest_mod: ModuleType) -> 
     assert times(first) == times(second)
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i13_no_nan_or_inf_in_equity_or_metrics(backtest_mod: ModuleType) -> None:
     """I13 (§8.3): no NaN/inf in equity curve or metrics.
 
@@ -1114,7 +1107,6 @@ def test_i13_no_nan_or_inf_in_equity_or_metrics(backtest_mod: ModuleType) -> Non
         assert np.isfinite(float(value)), f"metric {name} is NaN/inf: {value}"
 
 
-@pytest.mark.skip(reason="Awaiting engine implementation")
 def test_i14_stop_fill_never_above_stop_level(backtest_mod: ModuleType) -> None:
     """I14 (§8.3): long stop fill never ABOVE the stop level (pre-slippage),
     and gap fills happen at the open.
