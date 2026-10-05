@@ -229,8 +229,15 @@ def test_l6_slippage_on_sell(ledger_mod: ModuleType) -> None:
     assert ledger.shares == pytest.approx(0.0)
     # cash = 99499.75 + 549.725 - 0.2748625 (full arithmetic above):
     assert ledger.cash == pytest.approx(100049.2001375, abs=1e-6)
-    # adverse sell < no-slippage sell (L3's 100049.475):
-    assert ledger.cash < pytest.approx(100049.475)
+    # adverse sell < no-slippage sell (L3's 100049.475).
+    # OQ-0056 (owner-ratified 2026-10-05): this was written as
+    # `ledger.cash < pytest.approx(100049.475)`. On pytest 9.1.1 ApproxScalar
+    # implements only ==/!=, so Python raises TypeError from the rich-comparison
+    # protocol BEFORE any value is compared -- unsatisfiable by any Ledger
+    # implementation. Ordering against a plain float restores the intent; the
+    # margin (0.2748625) is ~1e6x larger than float noise, and the exact value is
+    # already pinned above.
+    assert ledger.cash < 100049.475
 
 
 # --------------------------------------------------------------------------- #

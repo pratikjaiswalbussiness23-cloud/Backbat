@@ -21,8 +21,8 @@ checked against the rules above, using full dotted module names so
 
 The self-canary tests assert the scanner FLAGS each forbidden import and
 PASSES each legal one, so a silent regression in the scanner itself
-cannot go unnoticed. The repo scan below passes today because
-``nlbt.engine`` does not exist yet; it will fail the day someone adds a
+cannot go unnoticed. The repo scan below covers the real ``nlbt.engine``
+package (present since P4); it will fail the day someone adds a
 forbidden import, which is exactly the point.
 """
 
@@ -135,17 +135,32 @@ def test_scanner_allows_legal_imports(package: str, source: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Repo scan: the actual gate. Passes today (no engine yet); fails the day a   #
-# forbidden import appears, which is the intended behaviour.                  #
+# Repo scan: the actual gate. Scans every module under src/nlbt, including   #
+# the engine package; fails the day a forbidden import appears, which is the  #
+# intended behaviour.                                                          #
 # --------------------------------------------------------------------------- #
 
 
-def test_engine_does_not_exist_yet() -> None:
-    """Documents the P0 state: the boundary gate is armed but has no target."""
-    assert not (SRC / "engine").is_dir(), (
-        "nlbt.engine now exists: review test_repo_imports_respect_boundaries "
-        "and tighten it (e.g. per-module checks) before relying on it."
+def test_engine_package_exists_and_is_scanned() -> None:
+    """The engine now exists, so the boundary gate has a real target (OQ-0057).
+
+    This test previously asserted ``not (SRC / "engine").is_dir()``, documenting
+    the P0 scaffold state where the §3.2 gate was armed but had nothing to scan.
+    It became unsatisfiable the moment P4 created the package, by design.
+
+    Owner-ratified 2026-10-05: rather than delete the check (which would silently
+    drop a guard), it is INVERTED into the positive assertion the repo scan now
+    depends on -- the engine package exists and is non-empty. If this ever fails,
+    ``test_repo_imports_respect_boundaries`` below is scanning a missing or empty
+    directory and would pass vacuously, which is the real risk worth failing on.
+    """
+    engine_dir = SRC / "engine"
+    assert engine_dir.is_dir(), (
+        "nlbt/src/nlbt/engine is missing: the boundary scan would run vacuously. "
+        "Restore the package or update this test deliberately."
     )
+    modules = sorted(p.name for p in engine_dir.glob("*.py"))
+    assert modules, "nlbt.engine exists but has no modules; the §3.2 scan would pass vacuously."
 
 
 def test_repo_imports_respect_boundaries() -> None:

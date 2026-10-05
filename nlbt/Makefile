@@ -20,14 +20,13 @@ lint:
 type:
 	$(UV) run mypy
 
+# P4: the engine test files were --ignore'd here ("exclude engine tests from
+# make all until engine is implemented", 3ff0793) while the implementation did
+# not exist. The engine now ships (97dd1de) and the two test-authoring defects
+# that kept the suite red are owner-ratified fixes (OQ-0056, OQ-0057), so the
+# gate covers the engine again.
 test:
-		$(UV) run pytest --cov --cov-report=term-missing --cov-report=xml \
-		--ignore=tests/unit/test_engine_ledger.py \
-		--ignore=tests/unit/test_engine_signals.py \
-		--ignore=tests/unit/test_engine_execution.py \
-		--ignore=tests/unit/test_engine_sizing.py \
-		--ignore=tests/unit/test_engine_risk.py \
-		--ignore=tests/unit/test_engine_scenarios.py
+		$(UV) run pytest --cov --cov-report=term-missing --cov-report=xml
 
 # P2-T8: regenerate docs/indicators.md + docs/indicators.json from the
 # registry. Run manually or as a CI pre-step — NOT part of `all`; freshness
