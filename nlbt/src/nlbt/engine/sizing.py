@@ -23,17 +23,20 @@ Formulas, verbatim §4.5 / P4-T6 (``fee_rate = fee_bps/10000``,
                                         (floor if integer)
 
 Every method is then CAPPED to what the cash allows with the same
-fee-inclusive divisor (``min(shares, cash / divisor)``, floored for integer
-shares) so a fill can never push cash negative (I2/L10): a raw-notional cap
-would overshoot by exactly the fee — SZ6's arithmetic shows
-``floor(10000 / 50.025) = 199``, while a raw ``10000/50 = 200`` would cost
-``10005 > cash``.
+fee-inclusive divisor (``min(shares, (cash - 2 * fixed_fee) / divisor)``,
+floored for integer shares) so a fill can never push cash negative (I2/L10):
+a raw-notional cap would overshoot by exactly the fee — SZ6's arithmetic
+shows ``floor(10000 / 50.025) = 199``, while a raw ``10000/50 = 200`` would
+cost ``10005 > cash``.
 
 ``fixed_fee`` (§4.1 ``execution.fixed_fee``) is NOT part of the §4.5
-divisor — it only reduces the cash budget behind the cap, exactly as the
-ledger's affordability check does (``(cash - fixed_fee) / divisor``), so
-sizing and ledger agree bit-for-bit. Every pinned criterion passes 0, for
-which ``cash - 0.0 == cash`` holds exactly.
+divisor — it only reduces the cash budget behind the cap, and the budget
+subtracts ``2 * fixed_fee``: the entry fee plus the LEDGER's reserve for
+the exit fee (OQ-0060, commit 052e7fb). The expression is IDENTICAL to
+the ledger's affordability budget (``(cash - 2.0 * fixed_fee) / divisor``),
+so sizing and ledger agree bit-for-bit and a cash-capped request can never
+trigger the ledger's "Buy size reduced" reduction (OQ-0060b). Every pinned
+criterion passes 0, for which ``cash - 2.0 * 0.0 == cash`` holds exactly.
 
 ``risk_per_trade`` without ``stop_loss_pct`` is a spec-validation error
 (P4-T6: "risk_per_trade without a stop is a spec-validation error") →
@@ -96,9 +99,11 @@ def compute_shares(
         raise ValueError(f"Unknown sizing method {method!r}")
 
     # Cash cap, fee-inclusive so fees cannot overshoot (I2/L10; SZ6).
-    # Budget subtracts the flat fee first — the ledger's affordability uses
-    # the identical expression, so sizing never requests an unfillable size.
-    max_cash_shares = (cash - fixed_fee) / divisor
+    # Budget subtracts 2 * fixed_fee — the entry fee plus the LEDGER's
+    # exit-fee reserve (OQ-0060) — with the IDENTICAL expression the ledger
+    # budgets, so sizing never requests a size the ledger would shrink
+    # ("Buy size reduced") or reject (OQ-0060b).
+    max_cash_shares = (cash - 2.0 * fixed_fee) / divisor
     if not allow_fractional:
         shares = float(math.floor(shares))
         max_cash_shares = float(math.floor(max_cash_shares))
