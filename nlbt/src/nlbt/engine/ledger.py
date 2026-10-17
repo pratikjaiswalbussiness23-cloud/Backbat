@@ -30,7 +30,11 @@ numbers pinned inside each.
 
 Affordability uses the fee-inclusive divisor ``fill * (1 + fee_rate)`` so a
 fill can never overshoot cash by its own fee (§4.5 sizing rule, I2/L10);
-``fixed_fee`` is subtracted from the budget first (buy side).
+``2 * fixed_fee`` is subtracted from the budget first (buy side) — the
+entry fee plus a RESERVE for the exit fee, so every position entered can
+always afford to close itself (OQ-0060, I8/I13). The reserve only caps
+the SIZE: the fee actually charged at entry stays ``1 * fixed_fee`` and
+the exit fee is still charged at exit.
 
 ``fixed_fee`` (``execution.fixed_fee``, §4.1) defaults to 0.0 — every pinned
 criterion constructs the ledger without it, so the percentage fee alone
@@ -46,12 +50,25 @@ from nlbt.errors import EngineInvariantError
 
 __all__ = ["Ledger"]
 
-#: Slack for IEEE-754 dust produced by the affordability division
+#: Relative slack for IEEE-754 dust produced by the affordability division
 #: (``cash / (fill * (1 + rate)) * fill * (1 + rate)`` can differ from
-#: ``cash`` by ~1 ulp). Anything below this magnitude is rounding noise, not
-#: an invariant violation; anything at or above it is a real overshoot and
-#: raises E_ENGINE_INVARIANT.
+#: ``cash`` by ~1 ulp, and an ulp scales with ``cash``). Anything at or
+#: below ``_cash_dust_tolerance(cash)`` is rounding noise, not an invariant
+#: violation; anything above it is a real overshoot and raises
+#: E_ENGINE_INVARIANT (OQ-0060: a fixed absolute 1e-9 was too tight at
+#: cash ~ 4.3e5, where normal dust exceeded it and a correct buy raised).
 _CASH_EPSILON = 1e-9
+
+
+def _cash_dust_tolerance(cash: float) -> float:
+    """Absolute dust tolerance for a ledger holding ``cash``.
+
+    Dust from the affordability division is proportional to the magnitudes
+    summed (≈1 ulp of ``cash``), so a fixed absolute epsilon is too tight
+    for large balances (OQ-0060). Relative tolerance with an absolute
+    floor: for ``abs(cash) <= 1`` this is exactly the old behavior.
+    """
+    return _CASH_EPSILON * max(1.0, abs(cash))
 
 
 class Ledger:
@@ -134,6 +151,11 @@ class Ledger:
         ``allow_fractional=False``) with a warning, or REJECTED (nothing
         charged, warning recorded) when zero shares are affordable — both
         branches keep ``cash >= 0`` (L7, OQ-0054: reduce-or-reject).
+
+        Affordability additionally reserves the exit fee's fixed part
+        (budget ``cash - 2 * fixed_fee``, OQ-0060) so the position can
+        always afford to close itself; the reserve caps the SIZE only —
+        the fee charged here stays ``1 * fixed_fee``.
         """
         rate_bps = self._fee_bps if fee_bps is None else fee_bps
         slip_bps = self._slippage_bps if slippage_bps is None else slippage_bps
@@ -143,11 +165,17 @@ class Ledger:
         fill = apply_slippage(price, "buy", slip_bps)
         requested = float(math.floor(shares)) if not self._allow_fractional else float(shares)
 
-        # Fee-inclusive affordability: actual * fill * (1 + rate) + fixed <= cash.
-        budget = self._cash - self._fixed_fee
+        # Fee-inclusive affordability: actual * fill * (1 + rate) + fixed <= cash,
+        # with the EXIT fee's fixed part reserved too (OQ-0060, I8/I13):
+        # cost*(1+rate) <= cash - 2*fixed  =>  cash after entry >= fixed, so the
+        # exit's fixed fee can never exceed cash + proceeds. The reserve only
+        # caps the size — the entry fee charged below stays 1*fixed_fee and
+        # nothing extra is ever deducted or recorded.
+        budget = self._cash - 2.0 * self._fixed_fee
         if budget <= 0.0:
             self._warnings.append(
-                f"Buy rejected: fixed fee {self._fixed_fee:g} exceeds cash {self._cash:g}."
+                f"Buy rejected: fixed fees (entry + exit reserve = "
+                f"{2.0 * self._fixed_fee:g}) reach cash {self._cash:g}."
             )
             return 0.0
         max_affordable = budget / (fill * (1.0 + rate_bps / 10_000.0))
@@ -170,7 +198,7 @@ class Ledger:
         fee = compute_fee(actual, fill, rate_bps, self._fixed_fee)
         new_cash = self._cash - cost - fee
         if new_cash < 0.0:
-            if new_cash >= -_CASH_EPSILON:
+            if new_cash >= -_cash_dust_tolerance(self._cash):
                 new_cash = 0.0  # IEEE-754 dust from the affordability division
             else:
                 raise EngineInvariantError(
@@ -217,7 +245,7 @@ class Ledger:
         fee = compute_fee(actual, fill, rate_bps, self._fixed_fee)
         new_cash = self._cash + proceeds - fee
         if new_cash < 0.0:
-            if new_cash >= -_CASH_EPSILON:
+            if new_cash >= -_cash_dust_tolerance(self._cash):
                 new_cash = 0.0
             else:
                 raise EngineInvariantError(
