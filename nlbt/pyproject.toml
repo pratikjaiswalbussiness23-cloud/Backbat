@@ -28,6 +28,7 @@ dev = [
     "hypothesis>=6.168.1",
     "jsonschema>=4.26.0",
     "types-jsonschema>=4.26.0.20260518",
+    "backtesting>=0.6.6",
 ]
 
 [tool.uv]
