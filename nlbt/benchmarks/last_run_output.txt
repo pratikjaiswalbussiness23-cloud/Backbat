@@ -1,0 +1,8 @@
+nlbt engine benchmark - ROADMAP P4-T12
+date (UTC): 2026-10-18T10:56:24+00:00
+Python:     3.14.4
+platform:   Windows-11-10.0.26200-SP0
+seed: 42  spec: SMA cross 10/30  capital: 100000  costs: 5bps fee / 5bps slippage
+OHLC validity: asserted in make_bars (low<=min(o,c)<=max(o,c)<=high, all > 0)
+bars=2500    time=0.116 s  (21,528 bars/s)  trades=47    final_equity=59353.00  warnings=0
+bars=100000  time=4.514 s  (22,154 bars/s)  trades=1939  final_equity=43639372.13  warnings=0
