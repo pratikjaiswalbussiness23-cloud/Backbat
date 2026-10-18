@@ -72,6 +72,12 @@ from nlbt.spec.models import StrategySpec
 
 __all__ = ["BacktestResult", "Trade", "run"]
 
+#: Cap on individually listed "Entry skipped … computed size 0" warnings
+#: (OQ-0061): a persistent signal with insufficient cash fires this once
+#: per bar, and a 100k-bar run must not emit 100k near-identical strings.
+#: Beyond the cap, one total-count summary line is appended after the loop.
+_ZERO_SIZE_SKIP_CAP = 20
+
 
 @dataclass
 class Trade:
@@ -180,6 +186,7 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
     symbol = spec.universe.symbols[0]
 
     warnings: list[str] = []
+    zero_size_skips = 0
     trades: list[Trade] = []
     open_pos: _OpenTrade | None = None
     risk: RiskManager | None = None
@@ -293,7 +300,21 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
                         trailing_stop_pct=spec.risk.trailing_stop_pct,
                         max_holding_bars=spec.risk.max_holding_bars,
                     )
-                # rejected buy: ledger recorded the warning; stay flat
+                else:
+                    # OQ-0061 (C4 / §4.5 "reject with a warning"): the entry
+                    # order FILLED but sized to 0, so the entry is SKIPPED —
+                    # record it loudly. (The ledger's own reject warnings are
+                    # unreachable here: sizing pre-clamps to 0 with the
+                    # identical budget — OQ-0060b — and ledger.buy(0)
+                    # no-ops silently at ledger.py:162.)
+                    zero_size_skips += 1
+                    if zero_size_skips <= _ZERO_SIZE_SKIP_CAP:
+                        warnings.append(
+                            f"Entry skipped on {index[t].date()}: computed size 0 "
+                            f"(cash {ledger.cash:g}, fill price {fill_price:g}, "
+                            f"fixed_fee {spec.execution.fixed_fee:g}); "
+                            f"entry signal from {order.signal_time.date()}."
+                        )
             elif order.kind == "exit" and open_pos is not None:
                 trades.append(
                     close_position(
@@ -385,6 +406,12 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
             )
         )
 
+    if zero_size_skips > _ZERO_SIZE_SKIP_CAP:
+        warnings.append(
+            f"Zero-size entry skips: {zero_size_skips} in total; "
+            f"{zero_size_skips - _ZERO_SIZE_SKIP_CAP} further occurrences not "
+            "listed (first occurrences shown above)."
+        )
     warnings.extend(ledger.warnings)
 
     equity_curve = pd.DataFrame(
