@@ -30,8 +30,13 @@ Semantics (§4.2):
 * ``evaluate_rule`` resolves operands per §4.2: raw OHLCV columns, indicator
   outputs (computed via the registry on demand, optional ``lag`` applied)
   and literal numbers; the rule tree (Condition / all / any / not) reduces
-  to one boolean array. Indicator warm-up NaN makes every comparison False,
-  so no signal can fire before all indicators are valid (S12).
+  to one boolean array. Warm-up is an explicit GATE on that array (§4.5):
+  the result is False wherever any indicator output the rule references is
+  NaN at that bar (a lag-k reference counts as valid from ``first_valid +
+  k``), so no signal can fire before all indicators used by the rule are
+  valid — for every tree shape. A bare "NaN comparison is False" guard is
+  not enough: ``not`` inverts it and literal ``any`` arms mask it (review
+  finding H1).
 """
 
 from __future__ import annotations
@@ -199,8 +204,11 @@ def evaluate_rule(
     computed once per call through ``registry`` (default: the global
     :data:`~nlbt.indicators.registry.REGISTRY`) with
     ``validate_indicator_params`` filling defaults, then read per operand
-    (``output`` column, ``lag`` shifted back). During indicator warm-up the
-    output is NaN → every comparison is False → no signal (S12).
+    (``output`` column, ``lag`` shifted back). The reduced rule array is
+    then gated (§4.5 warm-up): every bar where any indicator output the
+    rule references (post-``lag``) is NaN is forced False, whatever the
+    tree shape — so ``not`` rules and literal ``any`` arms cannot signal
+    during warm-up (review finding H1; pinned by tests W1-W11).
 
     Unknown indicator references and unknown output columns raise
     ``E_SPEC_REF`` (§4.8) rather than leaking a KeyError.
@@ -208,6 +216,7 @@ def evaluate_rule(
     reg = REGISTRY if registry is None else registry
     n = len(bars)
     cache: dict[str, pd.DataFrame] = {}
+    warmup_masks: list[np.ndarray] = []
 
     def resolve_operand(operand: Operand) -> np.ndarray:
         if isinstance(operand, NumberOperand):
@@ -244,6 +253,10 @@ def evaluate_rule(
             series = frame[operand.output].to_numpy(dtype=float)
             if operand.lag > 0:
                 series = lag(series, operand.lag)
+            # §4.5 warm-up gate: this reference is usable only where its
+            # (post-lag) output exists; collected here, applied to the
+            # reduced rule array below (finding H1).
+            warmup_masks.append(~np.isnan(series))
             return series
         raise TypeError(f"Unknown operand type: {type(operand)!r}")
 
@@ -258,4 +271,10 @@ def evaluate_rule(
             return logical_not(eval_node(node.condition))
         raise TypeError(f"Unknown rule node type: {type(node)!r}")
 
-    return eval_node(rule)
+    result = eval_node(rule)
+    if not warmup_masks:
+        return result
+    warm = np.ones(n, dtype=bool)
+    for mask in warmup_masks:
+        warm &= mask
+    return np.asarray(np.logical_and(result, warm), dtype=bool)

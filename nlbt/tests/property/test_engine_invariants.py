@@ -26,7 +26,8 @@ them, one test per invariant:
 
 INPUTS ARE GENERATED, NEVER HARDCODED: random OHLCV series (valid bars:
 low <= min(open, close) <= max(open, close) <= high, all prices > 0) plus
-random VALID StrategySpec knobs — indicator periods, relative vs absolute rule
+random VALID StrategySpec knobs — indicator periods, rule tree shapes
+(all/any/not — H1: not/any warm-up coverage), relative vs absolute rule
 families, stop/take/trailing/max-holding combinations, all four sizing
 methods, fee/slippage/fixed-fee combinations, capital — each drawn case
 re-checked through ``StrategySpec.model_validate`` AND the semantic
@@ -133,6 +134,8 @@ class Case:
     with_cross: bool  # entry/exit via sma_fast/sma_slow crossover vs close/sma_fast
     with_exit_rule: bool  # exit_long rule present (otherwise risk exits/end-of-data)
     rsi_filter: bool  # extra rsi14 < 70 condition on the entry rule
+    entry_shape: str  # rule tree shape: "all" | "any" | "not" (§4.2 grammar)
+    exit_shape: str  # same, for the exit_long rule
     abs_level: float  # absolute entry level (absolute family only)
     abs_exit_level: float  # absolute exit level (absolute family only)
     stop: float | None
@@ -178,6 +181,8 @@ def _cases(draw: Any) -> Case:
     )
 
     family = draw(st.sampled_from(("relative", "absolute")))
+    entry_shape = draw(st.sampled_from(("all", "any", "not")))
+    exit_shape = draw(st.sampled_from(("all", "any", "not")))
     fast = draw(st.integers(min_value=2, max_value=12))
     slow = draw(st.integers(min_value=13, max_value=25))  # always > fast (2..12)
     with_cross = draw(st.booleans())
@@ -222,6 +227,8 @@ def _cases(draw: Any) -> Case:
         with_cross=with_cross,
         with_exit_rule=with_exit_rule,
         rsi_filter=rsi_filter,
+        entry_shape=entry_shape,
+        exit_shape=exit_shape,
         abs_level=abs_level,
         abs_exit_level=abs_exit_level,
         stop=stop,
@@ -262,6 +269,24 @@ def _bars(case: Case) -> Bars:
         index=idx,
     )
     return Bars(frame)
+
+
+def _shaped(shape: str, conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a §4.2 rule tree of the drawn ``shape`` over ``conditions``.
+
+    ``all``/``any`` are the flat combinators; ``not`` wraps the condition
+    list in an inner ``all`` (nesting depth 2 of the §4.2 maximum 4). Rule
+    shape must not change the warm-up gate (§4.5): review finding H1 showed
+    ``not`` used to invert the old NaN-only guard, so the I4 generator now
+    exercises every shape.
+    """
+    if shape == "all":
+        return {"all": conditions}
+    if shape == "any":
+        return {"any": conditions}
+    if shape == "not":
+        return {"not": {"all": conditions}}
+    raise ValueError(f"unknown rule shape {shape!r}")
 
 
 def _rules(
@@ -307,8 +332,10 @@ def _rules(
     entry_conditions = [entry_condition]
     if case.rsi_filter:
         entry_conditions.append({"left": "rsi14", "op": "<", "right": 70.0})
-    entry: dict[str, Any] = {"all": entry_conditions}
-    exit_rule: dict[str, Any] | None = {"all": [exit_condition]} if case.with_exit_rule else None
+    entry = _shaped(case.entry_shape, entry_conditions)
+    exit_rule: dict[str, Any] | None = (
+        _shaped(case.exit_shape, [exit_condition]) if case.with_exit_rule else None
+    )
     return indicators, entry, exit_rule
 
 
@@ -386,12 +413,17 @@ def _entry_first_valid_index(spec: StrategySpec) -> int:
     Registry warm-up is the single source of truth (C7): ``warmup_fn``
     returns the index of the first valid output (verified against the
     installed registry: ``sma(period=5).warmup_fn == 4``, ``rsi(14) == 14``).
-    §4.2 makes any comparison/crossover involving NaN False, so no entry
-    signal can fire before that index. Generated rules use ``lag=0``
-    operands only, so no lag shift applies. Indicators read only by the EXIT
-    rule are excluded deliberately: I4 is about ENTRY, and an exit rule
-    still warming up merely evaluates False (hold), which is not an entry
-    before warm-up.
+    §4.5 requires a real warm-up GATE: the rule must evaluate False wherever
+    any indicator output it references is NaN, for EVERY rule tree shape —
+    a bare "NaN comparison is False" guard was not enough, because ``not``
+    inverts it and literal ``any`` arms mask it (review finding H1). This
+    helper recomputes the cutoff from the registry, NOT from any engine
+    output, so the engine cannot pass by agreeing with itself. Generated
+    rules use ``lag=0`` operands only, so no lag shift applies (a lag-k
+    reference would move the cutoff to first_valid + k). Indicators read
+    only by the EXIT rule are excluded deliberately: I4 is about ENTRY; an
+    exit rule warming up must also stay False (§4.5 "no signal can fire"),
+    pinned end-to-end by test_w9 in the unit suite.
     """
     first = 0
     for name in _referenced_indicators(spec.rules.entry_long):
