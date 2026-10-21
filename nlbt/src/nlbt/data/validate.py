@@ -48,7 +48,7 @@ def validate_bars_shape(bars: Any, context: str = "") -> Bars:
     * non-monotonic (unsorted) index
     * NaN in any OHLC column (volume NaN is tolerated)
     * any OHLC price <= 0
-    * ``high < low`` on any row
+    * ``open``/``close`` outside ``[low, high]`` on any row (implies ``high < low``)
 
     ``context`` is prefixed into every message so callers can identify the
     data source (e.g. the CSV path) in errors.
@@ -145,12 +145,19 @@ def validate_bars_shape(bars: Any, context: str = "") -> Bars:
             },
         )
 
-    inverted = bars["high"] < bars["low"]
-    if inverted.any():
+    below_low = bars[["open", "close"]].min(axis=1) < bars["low"]
+    above_high = bars[["open", "close"]].max(axis=1) > bars["high"]
+    out_of_bounds = below_low | above_high
+    if out_of_bounds.any():
         _fail(
             context,
-            "high < low on one or more rows",
-            {"rows": _samples(bars.index[inverted]), "count": int(inverted.sum())},
+            "open/close outside [low, high] on one or more rows",
+            {
+                "rows": _samples(bars.index[out_of_bounds]),
+                "count": int(out_of_bounds.sum()),
+            },
+            hint="OHLC must be internally consistent: "
+            "low <= min(open, close) <= max(open, close) <= high",
         )
 
     validated = Bars(bars)
