@@ -12,7 +12,7 @@ Blocking precedence (derived from the task's own fixtures/tests): the
 ``ohlc_violation.csv`` (high=98 < low=99) violates both the new max/min rule
 and ``validate_bars_shape``'s strict ``[low, high]`` bounds rule; the report must
 name the specific code. The remaining blocking faults (empty, unsorted, duplicates,
-non-positive prices, NaN in OHLC) reuse ``validate_bars_shape`` verbatim — its
+non-positive prices, NaN/±inf in OHLC) reuse ``validate_bars_shape`` verbatim — its
 message text becomes the ``blocked_by`` value (OQ-0010: codes vs free text).
 
 ``today`` is injectable for deterministic tests; ``None`` means ``date.today()``.

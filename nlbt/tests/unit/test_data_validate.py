@@ -138,3 +138,71 @@ def test_boundary_open_close_at_low_high_bounds_pass() -> None:
     result = validate_bars_shape(frame, context="bounds")
     assert isinstance(result, Bars)
     assert result.attrs["nlbt_validated"] is True
+
+
+# -------------------------------- OQ-0066: non-finite (±inf) OHLC rejection
+
+FINITE_HINT = "OHLC prices must be finite; fix or drop rows containing inf/-inf"
+NONFINITE_MESSAGE = "non-finite (inf/-inf) price value(s) in OHLC column(s)"
+
+
+def test_fault_inf_in_high_is_rejected() -> None:
+    frame = _valid_frame()
+    frame.iloc[4, frame.columns.get_loc("high")] = float("inf")
+    with pytest.raises(DataQualityError) as excinfo:
+        validate_bars_shape(frame, context="finite")
+    assert excinfo.value.code == "E_DATA_QUALITY"
+    assert excinfo.value.message == f"finite: {NONFINITE_MESSAGE}"
+    assert excinfo.value.details["count"] == 1
+    assert excinfo.value.details["rows"][0].startswith("2024-01-06")
+    assert excinfo.value.hint == FINITE_HINT
+
+
+def test_fault_negative_inf_in_low_is_rejected() -> None:
+    """Placement: -inf must hit the non-finite check, NOT the non-positive one."""
+    frame = _valid_frame()
+    frame.iloc[2, frame.columns.get_loc("low")] = float("-inf")
+    with pytest.raises(DataQualityError) as excinfo:
+        validate_bars_shape(frame, context="finite")
+    assert excinfo.value.message == f"finite: {NONFINITE_MESSAGE}"
+    assert "non-positive" not in excinfo.value.message
+    assert excinfo.value.details["count"] == 1
+    assert excinfo.value.details["rows"][0].startswith("2024-01-04")
+    assert excinfo.value.hint == FINITE_HINT
+
+
+def test_fault_inf_in_open_is_rejected() -> None:
+    frame = _valid_frame()
+    frame.iloc[6, frame.columns.get_loc("open")] = float("inf")
+    with pytest.raises(DataQualityError) as excinfo:
+        validate_bars_shape(frame, context="finite")
+    assert excinfo.value.code == "E_DATA_QUALITY"
+    assert excinfo.value.message == f"finite: {NONFINITE_MESSAGE}"
+    assert excinfo.value.details["count"] == 1
+    assert excinfo.value.details["rows"][0].startswith("2024-01-10")
+    assert excinfo.value.hint == FINITE_HINT
+
+
+def test_fault_negative_inf_in_close_is_rejected() -> None:
+    frame = _valid_frame()
+    frame.iloc[8, frame.columns.get_loc("close")] = float("-inf")
+    with pytest.raises(DataQualityError) as excinfo:
+        validate_bars_shape(frame, context="finite")
+    assert excinfo.value.code == "E_DATA_QUALITY"
+    assert excinfo.value.message == f"finite: {NONFINITE_MESSAGE}"
+    assert excinfo.value.details["count"] == 1
+    assert excinfo.value.details["rows"][0].startswith("2024-01-12")
+    assert excinfo.value.hint == FINITE_HINT
+
+
+def test_boundary_huge_finite_prices_pass() -> None:
+    """Near-float64-max (1e308) prices are finite and in-bounds -> still valid."""
+    frame = _valid_frame()
+    frame.iloc[0, frame.columns.get_loc("open")] = 1.5e308
+    frame.iloc[0, frame.columns.get_loc("high")] = 1.7e308
+    frame.iloc[0, frame.columns.get_loc("low")] = 1.4e308
+    frame.iloc[0, frame.columns.get_loc("close")] = 1.6e308
+    result = validate_bars_shape(frame, context="finite")
+    assert isinstance(result, Bars)
+    assert result.attrs["nlbt_validated"] is True
+    assert result["high"].iloc[0] == 1.7e308  # value preserved, no overflow to inf

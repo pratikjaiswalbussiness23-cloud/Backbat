@@ -31,7 +31,7 @@ class Bars(pd.DataFrame):
     * exactly the five lowercase columns ``open high low close volume``
     * tz-aware UTC ``DatetimeIndex``, sorted ascending, unique
     * every column ``float64``
-    * no NaN in OHLC (volume NaN tolerated); all prices > 0;
+    * no NaN/±inf in OHLC (volume NaN tolerated); all prices > 0;
       ``low <= min(open, close) <= max(open, close) <= high``
 
     ``_metadata``/``_constructor`` keep the subclass alive through pandas

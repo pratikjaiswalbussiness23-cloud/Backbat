@@ -47,6 +47,7 @@ def validate_bars_shape(bars: Any, context: str = "") -> Bars:
     * duplicate index entries
     * non-monotonic (unsorted) index
     * NaN in any OHLC column (volume NaN is tolerated)
+    * non-finite (±inf) price in any OHLC column
     * any OHLC price <= 0
     * ``open``/``close`` outside ``[low, high]`` on any row (implies ``high < low``)
 
@@ -131,6 +132,18 @@ def validate_bars_shape(bars: Any, context: str = "") -> Bars:
                 "count": int(rows_with_nan.sum()),
             },
             hint="OHLC cannot contain NaN (volume NaN is tolerated by the contract)",
+        )
+
+    rows_nonfinite = ohlc.isin([float("inf"), float("-inf")]).any(axis=1)
+    if rows_nonfinite.any():
+        _fail(
+            context,
+            "non-finite (inf/-inf) price value(s) in OHLC column(s)",
+            {
+                "rows": _samples(bars.index[rows_nonfinite]),
+                "count": int(rows_nonfinite.sum()),
+            },
+            hint="OHLC prices must be finite; fix or drop rows containing inf/-inf",
         )
 
     nonpositive = ohlc <= 0

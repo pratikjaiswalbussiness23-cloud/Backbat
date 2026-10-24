@@ -101,6 +101,17 @@ def test_low_above_min_blocks_low_high_violation() -> None:
     assert report.blocked_by == "LOW_HIGH_VIOLATION"
 
 
+def test_nonfinite_high_blocks_with_validator_message() -> None:
+    """OQ-0066: high=+inf reaches ``validate_bars_shape`` (no crash before it)
+    and the report comes back blocked with the validator's non-finite message."""
+    frame = _raw_frame("valid_daily.csv")
+    frame.iloc[4, frame.columns.get_loc("high")] = float("inf")
+    report = run_quality_checks(frame, _direct_meta("nonfinite"), today=TODAY)
+    assert report.passed_blocking is False
+    assert report.blocked_by == "non-finite (inf/-inf) price value(s) in OHLC column(s)"
+    assert report.warnings == []  # blocked reports carry no warnings
+
+
 def test_empty_dataframe_blocks() -> None:
     """Empty frame directly -> passed_blocking=False (validate-reuse path)."""
     frame = _raw_frame("valid_daily.csv").iloc[:0]
