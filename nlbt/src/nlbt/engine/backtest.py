@@ -61,6 +61,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
+from nlbt.data.frequency import infer_frequency
 from nlbt.data.models import Bars
 from nlbt.engine.execution import apply_slippage
 from nlbt.engine.ledger import Ledger
@@ -68,6 +69,7 @@ from nlbt.engine.risk import RiskManager
 from nlbt.engine.signals import evaluate_rule
 from nlbt.engine.sizing import compute_shares
 from nlbt.indicators.registry import REGISTRY, Registry
+from nlbt.metrics import compute_return_metrics
 from nlbt.spec.models import StrategySpec
 
 __all__ = ["BacktestResult", "Trade", "run"]
@@ -151,7 +153,13 @@ class _PendingOrder:
     reason: str  # exits: "signal" | "time_exit"; entries: "signal"
 
 
-def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> BacktestResult:
+def run(
+    spec: StrategySpec,
+    bars: Bars,
+    registry: Registry | None = None,
+    *,
+    rf: float = 0.0,
+) -> BacktestResult:
     """Run the §4.5 bar loop over ``bars`` for ``spec``; return the result.
 
     ``registry`` defaults to the global indicator registry
@@ -437,13 +445,28 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
     else:
         final_equity = equity_values[-1] if equity_values else initial_capital
     wins = sum(1 for trade in trades if trade.net_pnl > 0)
+    # P5-T1 (§4.7): settled series — a LOCAL copy whose last value is the
+    # realized final_equity after a forced close; the stored curve above is
+    # never modified. bars_per_year is inferred from the data, never
+    # hardcoded (§4.7); its warning and the metric warnings are deliberately
+    # NOT appended to ``warnings`` here (OQ-0072 owner ruling (a): surfaced
+    # in P5-T4).
+    settled = list(equity_values)
+    if closed_at_end and settled:
+        settled[-1] = final_equity
+    bars_per_year = infer_frequency(bars, spec.universe.interval).bars_per_year
+    return_metrics, _metric_warnings = compute_return_metrics(
+        np.asarray(settled, dtype=float),
+        pd.DatetimeIndex(times),
+        bars_per_year,
+        rf=rf,
+    )
     metrics: dict[str, float | None] = {
         "initial_capital": initial_capital,
         "final_equity": final_equity,
-        "total_return": (final_equity / initial_capital - 1.0) if initial_capital > 0 else None,
-        "max_drawdown": min(drawdown_values) if drawdown_values else None,
         "num_trades": float(len(trades)),
         "win_rate": (wins / len(trades)) if trades else None,
+        **return_metrics,  # total_return & max_drawdown computed in ONE place (P5-T1)
     }
 
     return BacktestResult(
