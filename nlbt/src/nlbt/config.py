@@ -65,6 +65,7 @@ class Config(BaseSettings):
         validation_alias="NLBT_DATA_CACHE_DIR",
     )
     db_path: str = Field(default="nlbt.db", validation_alias="NLBT_DB_PATH")
+    runs_dir: str = Field(default="runs", validation_alias="NLBT_RUNS_DIR")
     log_level: str = Field(default="INFO", validation_alias="NLBT_LOG_LEVEL")
 
     # --- Guard rails (§3.5: E_LIMIT_EXCEEDED budget) ------------------------

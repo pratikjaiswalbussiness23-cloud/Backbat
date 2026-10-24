@@ -49,8 +49,10 @@ return-metrics dict plus warnings. Caveats:
 - it uses **fractional shares** (fully invested);
 - at end of data it is closed by the same forced `end_of_data` close
   (exit costs included), so its metrics are settled like the strategy's;
-- warnings are returned, not attached: P5-T4 attaches `benchmark_metrics`
-  to the result (run()/BacktestResult are unchanged for the benchmark).
+- warnings are returned, not attached: `run()`/`BacktestResult` are
+  unchanged for the benchmark; `execute_run()` (P5-T4a) attaches
+  `benchmark_metrics` to the final result and surfaces these warnings
+  prefixed `"benchmark: "`.
 
 ## The settled series (owner decision, OQ-0064 / P5-T1)
 
@@ -79,11 +81,17 @@ fewer than 3 bars → volatility/Sharpe null; `years == 0` → CAGR null;
 non-positive start/end equity or non-finite input → all null;
 `bars_per_year <= 0` raises `ValueError`.
 
-**Warning surfacing is deferred (OQ-0072, owner ruling (a)):**
-`compute_return_metrics` returns its warnings, and `run()` also gets the
-`infer_frequency` warning, but neither is appended to
-`BacktestResult.warnings` in P5-T1. Both **must** be surfaced in P5-T4,
-whose Phase A proposes the channel — do not drop them.
+**Warning surfacing (OQ-0072, resolved in P5-T4a):** `run()` stays the
+pure engine — its `BacktestResult.warnings` is byte-for-byte unchanged
+(the S1–S6 and zero-size exact-list assertions still pass). `run()`
+collects the return-metric warnings, the trade-metric warnings and the
+`infer_frequency` warning into a new defaulted field
+`BacktestResult.metric_warnings: list[str]`. The final §4.6 result is
+built by `nlbt.results.execute_run()`, whose `RunResult.warnings` is
+`engine.warnings + engine.metric_warnings + benchmark warnings`, where
+benchmark warnings are prefixed `"benchmark: "`; exact duplicates are
+dropped, order preserved, engine warnings first. Persisting the result
+(`result.json` under `runs/<run_id>/`) is `results/store.py`.
 
 ## Risk-free rate
 

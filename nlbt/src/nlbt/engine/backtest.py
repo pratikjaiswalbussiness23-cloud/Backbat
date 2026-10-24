@@ -55,7 +55,7 @@ the current high (§4.5/P4-T10 defences).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -127,6 +127,11 @@ class BacktestResult:
     equity_curve: pd.DataFrame
     warnings: list[str]
     metrics: dict[str, float | None]
+    #: Return-metric, trade-metric and ``infer_frequency`` warnings,
+    #: deferred for surfacing by ``nlbt.results.execute_run`` (OQ-0072
+    #: owner-ruled channel). ``warnings`` above stays engine-only so every
+    #: existing exact-assertion on it keeps passing.
+    metric_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -453,17 +458,17 @@ def run(
     settled = list(equity_values)
     if closed_at_end and settled:
         settled[-1] = final_equity
-    bars_per_year = infer_frequency(bars, spec.universe.interval).bars_per_year
-    return_metrics, _metric_warnings = compute_return_metrics(
+    freq = infer_frequency(bars, spec.universe.interval)
+    return_metrics, return_warnings = compute_return_metrics(
         np.asarray(settled, dtype=float),
         pd.DatetimeIndex(times),
-        bars_per_year,
+        freq.bars_per_year,
         rf=rf,
     )
     # P5-T2 (§4.7): trade metrics computed in ONE place (metrics/trades.py);
     # the mask comes from the curve's position_value > 0. Warnings returned
     # but NOT appended to result.warnings (OQ-0072 ruling (a): P5-T4).
-    trade_metrics, _trade_warnings = compute_trade_metrics(
+    trade_metrics, trade_warnings = compute_trade_metrics(
         trades,
         equity_curve["position_value"].to_numpy() > 0.0,
     )
@@ -473,10 +478,17 @@ def run(
         **return_metrics,  # total_return & max_drawdown computed in ONE place (P5-T1)
         **trade_metrics,  # num_trades/win_rate/... computed in ONE place (P5-T2)
     }
+    # OQ-0072 (resolved by P5-T4a): surfaced by nlbt.results.execute_run
+    # (final warnings = engine warnings + these + benchmark-prefixed ones);
+    # run().warnings itself stays engine-only (existing exact assertions).
+    metric_warnings = [*return_warnings, *trade_warnings]
+    if freq.warning is not None:
+        metric_warnings.append(freq.warning)
 
     return BacktestResult(
         trades=trades,
         equity_curve=equity_curve,
         warnings=warnings,
         metrics=metrics,
+        metric_warnings=metric_warnings,
     )
