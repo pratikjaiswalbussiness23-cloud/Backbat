@@ -69,7 +69,7 @@ from nlbt.engine.risk import RiskManager
 from nlbt.engine.signals import evaluate_rule
 from nlbt.engine.sizing import compute_shares
 from nlbt.indicators.registry import REGISTRY, Registry
-from nlbt.metrics import compute_return_metrics
+from nlbt.metrics import compute_return_metrics, compute_trade_metrics
 from nlbt.spec.models import StrategySpec
 
 __all__ = ["BacktestResult", "Trade", "run"]
@@ -444,7 +444,6 @@ def run(
         final_equity = ledger.cash
     else:
         final_equity = equity_values[-1] if equity_values else initial_capital
-    wins = sum(1 for trade in trades if trade.net_pnl > 0)
     # P5-T1 (§4.7): settled series — a LOCAL copy whose last value is the
     # realized final_equity after a forced close; the stored curve above is
     # never modified. bars_per_year is inferred from the data, never
@@ -461,12 +460,18 @@ def run(
         bars_per_year,
         rf=rf,
     )
+    # P5-T2 (§4.7): trade metrics computed in ONE place (metrics/trades.py);
+    # the mask comes from the curve's position_value > 0. Warnings returned
+    # but NOT appended to result.warnings (OQ-0072 ruling (a): P5-T4).
+    trade_metrics, _trade_warnings = compute_trade_metrics(
+        trades,
+        equity_curve["position_value"].to_numpy() > 0.0,
+    )
     metrics: dict[str, float | None] = {
         "initial_capital": initial_capital,
         "final_equity": final_equity,
-        "num_trades": float(len(trades)),
-        "win_rate": (wins / len(trades)) if trades else None,
         **return_metrics,  # total_return & max_drawdown computed in ONE place (P5-T1)
+        **trade_metrics,  # num_trades/win_rate/... computed in ONE place (P5-T2)
     }
 
     return BacktestResult(

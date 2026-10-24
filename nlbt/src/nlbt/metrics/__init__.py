@@ -7,5 +7,6 @@ Pure functions on a settled equity series; must never import
 from __future__ import annotations
 
 from nlbt.metrics.returns import compute_return_metrics
+from nlbt.metrics.trades import TradeLike, compute_trade_metrics
 
-__all__ = ["compute_return_metrics"]
+__all__ = ["TradeLike", "compute_return_metrics", "compute_trade_metrics"]

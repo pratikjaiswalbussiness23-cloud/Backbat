@@ -21,6 +21,37 @@ an independent numpy oracle (`tests/unit/test_metrics_returns.py`).
 Sortino is **not implemented** (OQ-0071): §4.7 gives only the
 downside-deviation formula, with no ratio form or target definition.
 
+## Trade-based metrics (P5-T2, rulings OQ-0073/OQ-0074)
+
+| Metric | Definition |
+|--------|------------|
+| Num trades | count of completed trades (0 when none — a defined count) |
+| Win rate | trades with `net_pnl > 0` / total trades |
+| Profit factor | **NET basis**: `sum(net_pnl > 0) / abs(sum(net_pnl < 0))`; null + warning when there are no losses — the warning IS the §4.7 flag |
+| Expectancy | mean `return_pct` over ALL trades |
+| Avg win / avg loss | means of `return_pct` split by `net_pnl > 0` / `net_pnl < 0`; a breakeven trade (`net_pnl == 0`) belongs to neither |
+| Longest losing streak | consecutive trades with `net_pnl < 0`; a breakeven trade resets the streak |
+| Exposure | fraction of bars with an open position (equity curve `position_value > 0`) |
+
+MAE/MFE stay per trade (`Trade.mae_pct` / `Trade.mfe_pct`); no aggregates
+(OQ-0073 deferred).
+
+## Benchmark (P5-T3)
+
+`nlbt.engine.benchmark.compute_benchmark(spec, bars, rf=0.0)` runs a private
+buy-and-hold spec through the **same engine** — same universe, period,
+execution costs (fee/slippage/fixed_fee) and capital; `entry_long = close>0`,
+no exit, no risk, 100% equity, fractional shares — and returns the same §4.7
+return-metrics dict plus warnings. Caveats:
+
+- the benchmark buys at the **first fill (bar 1 open, as in SC2)**, not at
+  the strategy's own start after warm-up;
+- it uses **fractional shares** (fully invested);
+- at end of data it is closed by the same forced `end_of_data` close
+  (exit costs included), so its metrics are settled like the strategy's;
+- warnings are returned, not attached: P5-T4 attaches `benchmark_metrics`
+  to the result (run()/BacktestResult are unchanged for the benchmark).
+
 ## The settled series (owner decision, OQ-0064 / P5-T1)
 
 All metrics above are computed on the **settled equity series**: the
