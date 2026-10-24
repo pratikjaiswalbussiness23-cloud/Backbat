@@ -572,7 +572,8 @@ def test_i6_exit_not_before_entry_and_bars_held_non_negative(case: Case) -> None
 @given(case=_CASES)
 def test_i7_fees_nonnegative_and_net_pnl_sums_to_equity_change(case: Case) -> None:
     """I7 (§8.3): fees >= 0, slippage cost >= 0, and sum(net_pnl) equals
-    final_equity - initial_capital when flat at the end.
+    final_equity - initial_capital when flat at the end — and the REPORTED
+    metrics identity holds for EVERY run (OQ-0064).
 
     The sum identity is a cash-flow partition, derived here: every ledger
     operation of a completed trade is ``-shares*fill_entry - fee_entry``
@@ -581,9 +582,12 @@ def test_i7_fees_nonnegative_and_net_pnl_sums_to_equity_change(case: Case) -> No
     ``fill == recorded price`` (§4.6), so per trade
     ``net_pnl == cash_delta``, and cash changes ONLY through completed
     trades — therefore ``sum(net_pnl) == cash_final - initial`` whenever
-    the final row is flat. Runs still holding a position at the last bar
-    (whose end_of_data close settles AFTER the final row is recorded, §4.5)
-    are excluded exactly by the ``position_value == 0`` precondition below.
+    the final row is flat, and the curve's last equity equals that cash.
+    Runs still holding a position at the last bar (whose end_of_data close
+    settles AFTER the final curve row, §4.5) do NOT satisfy the identity
+    against the CURVE — but since OQ-0064 the reported
+    ``metrics["final_equity"]`` is the realized post-close cash, so the
+    identity must hold against the metrics for ALL runs, flat or not.
     ``MONEY_TOL`` absorbs only IEEE accumulation, not a missing fee.
     """
     spec, bars = _build(case)
@@ -593,12 +597,19 @@ def test_i7_fees_nonnegative_and_net_pnl_sums_to_equity_change(case: Case) -> No
         assert trade.slippage_cost >= 0.0, f"I7 broken: negative slippage {trade.slippage_cost}"
 
     curve = result.equity_curve
-    if float(curve["position_value"].iloc[-1]) > 1e-9:
-        return  # not flat: the sum identity does not apply (precondition)
     total = sum(t.net_pnl for t in result.trades)
-    expected = float(curve["equity"].iloc[-1]) - case.capital
-    assert total == pytest.approx(expected, rel=1e-9, abs=MONEY_TOL), (
-        f"I7 broken: sum(net_pnl) = {total!r} != final - initial = {expected!r}"
+    if float(curve["position_value"].iloc[-1]) <= 1e-9:
+        # Flat at the end: the curve identity (kept as-is).
+        expected = float(curve["equity"].iloc[-1]) - case.capital
+        assert total == pytest.approx(expected, rel=1e-9, abs=MONEY_TOL), (
+            f"I7 broken: sum(net_pnl) = {total!r} != final - initial = {expected!r}"
+        )
+    # OQ-0064: metrics identity — ALL runs, including those ending in
+    # position (final_equity = realized post-close cash).
+    metrics_final = float(result.metrics["final_equity"])
+    assert total == pytest.approx(metrics_final - case.capital, rel=1e-9, abs=MONEY_TOL), (
+        f"I7 broken (metrics): sum(net_pnl) = {total!r} != "
+        f"metrics.final_equity - capital = {metrics_final - case.capital!r}"
     )
 
 

@@ -393,6 +393,7 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
         drawdown_values.append(drawdown)
 
     # ---- edge rule: close any position still open after the last bar ----
+    closed_at_end = open_pos is not None
     if open_pos is not None:
         last_close = float(closes[n - 1])
         trades.append(
@@ -426,7 +427,15 @@ def run(spec: StrategySpec, bars: Bars, registry: Registry | None = None) -> Bac
     )
 
     initial_capital = float(spec.capital.initial)
-    final_equity = equity_values[-1] if equity_values else initial_capital
+    # OQ-0064: when the forced end_of_data close ran, report the REALIZED
+    # post-close cash (``ledger.cash`` — the close already flowed fee and
+    # slippage through the ledger); otherwise keep the last curve row. The
+    # equity curve itself, including its last row, stays pre-settlement
+    # (differential S1 depends on it).
+    if closed_at_end:
+        final_equity = ledger.cash
+    else:
+        final_equity = equity_values[-1] if equity_values else initial_capital
     wins = sum(1 for trade in trades if trade.net_pnl > 0)
     metrics: dict[str, float | None] = {
         "initial_capital": initial_capital,
