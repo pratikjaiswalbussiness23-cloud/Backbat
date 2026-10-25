@@ -1,0 +1,30 @@
+{
+  "host": "https://integrate.api.nvidia.com/v1",
+  "name": "p6t1_smoke_envelope",
+  "recorded_at": "2026-10-25T20:10:34+00:00",
+  "request": {
+    "messages": [
+      {
+        "content": "You translate English into the nlbt envelope JSON. Output JSON only, matching the provided schema.",
+        "role": "system"
+      },
+      {
+        "content": "Respond with JSON only: {\"status\": \"ok\", \"spec\": null, \"questions\": [], \"assumptions\": [], \"unsupported\": []}",
+        "role": "user"
+      }
+    ],
+    "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "schema_sha256": "81e502f9b99cdb1258ba290b549e95879a831d23ee961b9bb240265c98ba30c9",
+    "structured_mode": "json_schema",
+    "temperature": 0.0
+  },
+  "request_hash": "89a137152ba98d9f97b8da0c1c2a37c984bf00c50720aa3b5b0c7ec6a906ee4b",
+  "response": {
+    "assumptions": [],
+    "questions": [],
+    "spec": null,
+    "status": "ok",
+    "unsupported": []
+  },
+  "source": "recorded"
+}

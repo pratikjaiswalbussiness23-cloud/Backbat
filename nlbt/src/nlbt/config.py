@@ -58,6 +58,15 @@ class Config(BaseSettings):
         default="claude-3-5-sonnet-20241022",
         validation_alias="NLBT_LLM_MODEL",
     )  # real ID but retired; see OQ-0001
+    # P6-T1 (owner ruling 2026-10-25): provider-neutral OpenAI-compatible client.
+    nvidia_api_key: str | None = Field(
+        default=None,
+        validation_alias="NVIDIA_API_KEY",
+    )  # optional until an LLM call is attempted (same rule as anthropic_api_key)
+    llm_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1",
+        validation_alias="NLBT_LLM_BASE_URL",
+    )  # NVIDIA NIM OpenAI-compatible endpoint; overridable for any other provider
 
     # --- Paths / behaviour ------------------------------------------------
     data_cache_dir: str = Field(

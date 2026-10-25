@@ -35,6 +35,8 @@ _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # GitHub personal access tokens: ghp_ / gho_ / github_pat_
     (re.compile(r"gh[pousr]_[A-Za-z0-9]{16,}"), "[REDACTED]"),
     (re.compile(r"github_pat_[A-Za-z0-9_]{20,}"), "[REDACTED]"),
+    # NVIDIA NIM keys (P6-T1): nvapi-<token>, redacted even BARE (no Bearer prefix)
+    (re.compile(r"nvapi-[A-Za-z0-9_\-]{8,}"), "[REDACTED]"),
     # Bearer tokens (case-insensitive scheme, token = unreserved chars)
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/\-=]{8,}"), "Bearer [REDACTED]"),
 )
@@ -71,9 +73,12 @@ class SecretRedactionFilter(logging.Filter):
     def _redact(self, message: str) -> str:
         for pattern, replacement in _REDACTION_PATTERNS:
             message = pattern.sub(replacement, message)
-        live_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if live_key:
-            message = message.replace(live_key, "[REDACTED]")
+        # Live-key substitution: any configured key value is replaced verbatim,
+        # even when it does not match a shape pattern (P6-T1 added NVIDIA).
+        for env_var in ("ANTHROPIC_API_KEY", "NVIDIA_API_KEY"):
+            live_key = os.environ.get(env_var, "")
+            if live_key:
+                message = message.replace(live_key, "[REDACTED]")
         return message
 
 
