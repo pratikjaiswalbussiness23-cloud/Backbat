@@ -1,0 +1,139 @@
+{
+  "benchmark_metrics": {
+    "annualised_volatility": 1.4365368543543107,
+    "cagr": 19399.91254667998,
+    "calmar": 113812.82027385592,
+    "longest_drawdown_bars": 5.0,
+    "max_drawdown": -0.17045454545454541,
+    "risk_free_rate": 0.0,
+    "sharpe": 7.221124530421859,
+    "total_return": 0.5
+  },
+  "data_quality_report": {
+    "adjusted": false,
+    "bars": 12,
+    "blocked_by": null,
+    "end": "2024-01-17",
+    "interval": "1d",
+    "passed_blocking": true,
+    "start": "2024-01-02",
+    "symbol": "tests/fixtures/csv/cli_daily.csv",
+    "warnings": []
+  },
+  "manifest": {
+    "data": {
+      "adjusted": false,
+      "bars": 12,
+      "interval": "1d",
+      "provider": "csv",
+      "source": {
+        "kind": "csv"
+      },
+      "symbol": "tests/fixtures/csv/cli_daily.csv"
+    },
+    "data_hash": "sha256:56461ff4b5b2fbe5fda4975a90ec6825e7244b1fa5251c51c1c59485baf01d15",
+    "llm": {
+      "llm_model": null,
+      "prompt_version": null,
+      "user_confirmed_at": null
+    },
+    "spec": {
+      "assumptions": [],
+      "capital": {
+        "currency": "USD",
+        "initial": 10000
+      },
+      "execution": {
+        "fee_bps": 0,
+        "fill": "next_open",
+        "fixed_fee": 0,
+        "slippage_bps": 0
+      },
+      "indicators": {},
+      "name": "CLI golden crossover",
+      "period": {
+        "end": "2024-01-17",
+        "start": "2024-01-02"
+      },
+      "risk": {
+        "max_holding_bars": null,
+        "stop_loss_pct": null,
+        "take_profit_pct": null,
+        "trailing_stop_pct": null
+      },
+      "rules": {
+        "entry_long": {
+          "conditions": [
+            {
+              "kind": "condition",
+              "left": {
+                "kind": "raw_column",
+                "name": "close"
+              },
+              "op": "crosses_above",
+              "right": {
+                "kind": "number",
+                "value": 80
+              }
+            }
+          ],
+          "kind": "all"
+        },
+        "exit_long": {
+          "conditions": [
+            {
+              "kind": "condition",
+              "left": {
+                "kind": "raw_column",
+                "name": "close"
+              },
+              "op": "crosses_below",
+              "right": {
+                "kind": "number",
+                "value": 75
+              }
+            }
+          ],
+          "kind": "all"
+        }
+      },
+      "sizing": {
+        "allow_fractional": true,
+        "method": "percent_of_equity",
+        "value": 100
+      },
+      "source_text": null,
+      "spec_version": "1.0",
+      "universe": {
+        "interval": "1d",
+        "symbols": [
+          "ACME"
+        ]
+      },
+      "unsupported": []
+    },
+    "spec_hash_full": "sha256:c681b6f49f95714e198c1d5a3bc9381c0dc489ab2f09da3749df61d7ace81f02",
+    "spec_hash_logic": "sha256:d32fa0d2ee3f092f4f6a7a820278c8974175196e60ac3300b572f246d05c7c10"
+  },
+  "metrics": {
+    "annualised_volatility": 0.889385904460265,
+    "avg_loss": -0.05,
+    "avg_win": 0.10526315789473684,
+    "cagr": 2.2806464701246467,
+    "calmar": 14.335492097926354,
+    "expectancy": 0.027631578947368417,
+    "exposure": 0.5,
+    "final_equity": 10500.0,
+    "initial_capital": 10000.0,
+    "longest_drawdown_bars": 7.0,
+    "longest_losing_streak": 1.0,
+    "max_drawdown": -0.15909090909090906,
+    "num_trades": 2.0,
+    "profit_factor": 2.0,
+    "risk_free_rate": 0.0,
+    "sharpe": 1.6866523561753528,
+    "total_return": 0.050000000000000044,
+    "win_rate": 0.5
+  },
+  "warnings": []
+}

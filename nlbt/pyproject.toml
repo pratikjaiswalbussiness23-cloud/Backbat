@@ -16,6 +16,9 @@ dependencies = [
     "yfinance>=1.7,<2",  # P1-T3: yfinance provider (see OQ-0006, DEPENDENCIES.md)
 ]
 
+[project.scripts]
+nlbt = "nlbt.cli:main"  # P5-T5: returns the exit code (0/1/2); wraps nlbt.cli.main
+
 [dependency-groups]
 dev = [
     "ruff>=0.16",

@@ -1,0 +1,51 @@
+{
+  "spec_version": "1.0",
+  "name": "CLI semantic-invalid spec",
+  "universe": {
+    "symbols": ["ACME"],
+    "interval": "1d"
+  },
+  "period": {
+    "start": "2024-01-02",
+    "end": "2024-01-17"
+  },
+  "indicators": {},
+  "rules": {
+    "entry_long": {
+      "all": [
+        {
+          "left": {
+            "name": "sma_fast"
+          },
+          "op": ">",
+          "right": 50.0
+        }
+      ]
+    },
+    "exit_long": {
+      "all": [
+        {
+          "left": "close",
+          "op": "crosses_below",
+          "right": 75.0
+        }
+      ]
+    }
+  },
+  "risk": {},
+  "sizing": {
+    "method": "percent_of_equity",
+    "value": 100.0,
+    "allow_fractional": true
+  },
+  "execution": {
+    "fill": "next_open",
+    "fee_bps": 0.0,
+    "slippage_bps": 0.0,
+    "fixed_fee": 0.0
+  },
+  "capital": {
+    "initial": 10000.0,
+    "currency": "USD"
+  }
+}
