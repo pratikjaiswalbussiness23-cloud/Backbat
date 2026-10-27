@@ -59,6 +59,10 @@ class Envelope(BaseModel):
     questions: list[EnvelopeQuestion] = []
     assumptions: list[EnvelopeAssumption] = []
     unsupported: list[str] = []
+    #: Raw relative-date phrase ("last 3 years") passed through untouched;
+    #: nlbt resolves it in code with an injected clock (S10, P6-T6) — the
+    #: model never computes dates. P6-T3: optional, defaults to null.
+    period_expression: str | None = None
 
 
 def envelope_schema() -> dict[str, Any]:

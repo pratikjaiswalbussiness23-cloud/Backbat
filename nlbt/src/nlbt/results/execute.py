@@ -21,7 +21,7 @@ from __future__ import annotations
 import platform
 import re
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import metadata as importlib_metadata
@@ -41,6 +41,11 @@ from nlbt.spec.models import StrategySpec
 __all__ = ["RunResult", "execute_run"]
 
 _PACKAGES = ("pandas", "numpy", "pydantic", "pyarrow")
+
+#: Appendix-E manifest["nl"] keys (P6-T3 / OQ-0081). Accepted via the
+#: optional ``nl_meta`` mapping so the JSON-only ``nlbt run`` path keeps the
+#: EXISTING manifest shape byte-for-byte (golden files untouched).
+_NL_META_KEYS = ("llm_model", "prompt_version", "llm_source", "assumptions", "user_confirmed_at")
 
 
 @dataclass
@@ -152,9 +157,15 @@ def execute_run(
     runs_dir: Path | None = None,
     persist: bool = True,
     now: datetime | None = None,
+    nl_meta: Mapping[str, Any] | None = None,
 ) -> RunResult:
     """Build the §4.6 result for one run; persist ``result.json`` unless
-    ``persist=False``. ``now`` is injectable for deterministic tests."""
+    ``persist=False``. ``now`` is injectable for deterministic tests.
+
+    ``nl_meta`` (optional, P6-T3): when supplied, its five Appendix-E values
+    are recorded under ``manifest["nl"]``; when omitted the manifest is
+    EXACTLY as before this phase existed (existing tests + goldens).
+    """
     started = now if now is not None else datetime.now(UTC)
 
     engine = run(spec, bars, rf=rf)
@@ -170,6 +181,14 @@ def execute_run(
         data_source=data_source,
         meta=meta,
     )
+    if nl_meta is not None:
+        missing = [key for key in _NL_META_KEYS if key not in nl_meta]
+        if missing:
+            raise ValueError(
+                f"nl_meta is missing required Appendix-E keys: {missing} "
+                f"(required: {list(_NL_META_KEYS)})"
+            )
+        manifest["nl"] = {key: nl_meta[key] for key in _NL_META_KEYS}
     run_id = f"{started:%Y-%m-%dT%H-%M-%SZ}_{spec_hash_logic(spec)[7:13]}"
 
     report: dict[str, Any] | None = None
