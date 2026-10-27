@@ -25,8 +25,9 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from nlbt.errors import LimitExceededError, NLLlmError
+from nlbt.errors import LimitExceededError, NLLlmError, SpecRangeError
 from nlbt.nl.client import LLMResponse
+from nlbt.nl.dates import PeriodExpression, resolve_period
 from nlbt.nl.envelope import Envelope
 from nlbt.nl.prompt import ASSUMPTION_FIELDS, PROMPT_VERSION, build_system_prompt
 from nlbt.spec.defaults import DEFAULTS, MUST_ASK, resolve_date_range
@@ -66,6 +67,9 @@ _NO_SPEC_STATUSES = frozenset({"needs_clarification", "unsupported"})
 
 _REASON = "nlbt default (spec/defaults.py)"
 
+#: Reason recorded for dates code-resolved from a period_expression (P6-T6).
+_PERIOD_RESOLVED_REASON = "resolved from period_expression (injected clock)"
+
 #: spec dotted-path -> the DEFAULTS value (S6: the ONLY source of defaults).
 _MANAGED_DEFAULTS: dict[str, Any] = {
     "universe.interval": DEFAULTS.interval,
@@ -89,7 +93,7 @@ class ParseResult:
     questions: list[dict[str, Any]] = field(default_factory=list)
     assumptions: list[Assumption] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
-    period_expression: str | None = None
+    period_expression: PeriodExpression | None = None
     llm_model: str = ""
     prompt_version: str = PROMPT_VERSION
     llm_source: str = "recorded"
@@ -360,7 +364,49 @@ def _validate_once(
 
     model_provided_period = envelope.spec.get("period") is not None
     spec_dict = dict(envelope.spec)
+    resolved_period: tuple[date, date] | None = None
+    if envelope.period_expression is not None and model_provided_period:
+        # OQ-D (P6-T6): the prompt says "Never output both" — enforced here
+        # as a repairable E_NL_ENVELOPE error, never a silent pick.
+        errors.append(
+            {
+                "code": "E_NL_ENVELOPE",
+                "path": "period_expression",
+                "message": "spec.period and period_expression are mutually exclusive",
+                "hint": (
+                    "Omit spec.period for a relative expression, or omit "
+                    "period_expression for explicit calendar dates."
+                ),
+            }
+        )
+    elif envelope.period_expression is not None:
+        # P6-T6/S10: code resolves the structured expression against the
+        # INJECTED clock; the model never produces dates for it.
+        try:
+            resolved_period = resolve_period(envelope.period_expression, today)
+        except SpecRangeError as exc:
+            errors.append(
+                {
+                    "code": exc.code,
+                    "path": "period_expression",
+                    "message": exc.message,
+                    "hint": exc.hint,
+                }
+            )
+        else:
+            start, end = resolved_period
+            spec_dict["period"] = {"start": start.isoformat(), "end": end.isoformat()}
     code_assumptions = _apply_defaults(spec_dict, today)
+    if resolved_period is not None:
+        start, end = resolved_period
+        code_assumptions.append(
+            Assumption(
+                field="period.start", value=start.isoformat(), reason=_PERIOD_RESOLVED_REASON
+            )
+        )
+        code_assumptions.append(
+            Assumption(field="period.end", value=end.isoformat(), reason=_PERIOD_RESOLVED_REASON)
+        )
     try:
         spec_dict["source_text"] = text
         spec = StrategySpec.model_validate(spec_dict)
@@ -400,7 +446,6 @@ def _gate_checks(
     is subject to the deterministic gates.
     """
     unsupported = [str(item) for item in sanitized.get("unsupported", [])]
-    period_expression = sanitized.get("period_expression")
     spec_dict = sanitized.get("spec") or {}
 
     if sanitized["status"] == "needs_clarification":
@@ -411,14 +456,6 @@ def _gate_checks(
 
     if strict and unsupported:
         return "unsupported", None, unsupported
-    if period_expression and not sanitized.get("model_provided_period"):
-        # P6-T6 (date resolution by code) is not built in this phase: never
-        # guess dates (S10/C4) and never silently drop the expression.
-        return (
-            "unsupported",
-            None,
-            [*unsupported, "relative date expression (period resolution unavailable)"],
-        )
     if "stop" in text.casefold() and not (spec_dict.get("risk") or {}).get("stop_loss_pct"):
         return (
             "needs_clarification",

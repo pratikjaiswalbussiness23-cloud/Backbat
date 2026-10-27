@@ -40,13 +40,15 @@ __all__ = [
 ]
 
 #: Recorded in every manifest (ROADMAP P6-T2 Do; Appendix E "prompt_version").
-PROMPT_VERSION = "1"
+#: "2" (P6-T6): period_expression became a structured PeriodExpression object.
+PROMPT_VERSION = "2"
 
 #: sha256 of static_prompt_text() per PROMPT_VERSION. A prompt-text edit
 #: without a version bump fails the hash test; a version bump without a
 #: recorded hash fails it too (KeyError). Update BOTH together, deliberately.
 PROMPT_TEXT_SHA256_BY_VERSION: dict[str, str] = {
     "1": "f708f667d693e2715a01df66a6b0478004736529f7e55aae856188379dd02e86",
+    "2": "d82ff5fd7d39c124ddb539832fdd844d7b91be9950347fc9f836ba76ef01bcb3",
 }
 
 #: The ONLY dotted fields an envelope assumption may name (S6). The prompt
@@ -165,10 +167,18 @@ rejected.
 unsupported[]: a non-empty list blocks the run (strict mode); keep it [] on
 status "ok".
 
-period_expression: for RELATIVE date phrasing ("last 3 years", "since 2020",
-"during 2022") put the raw English phrase here and OMIT "period" from the
-spec - nlbt resolves dates in deterministic code with an injected clock,
-never you. For explicit calendar dates give
+period_expression: for RELATIVE date phrasing emit a STRUCTURED object, never
+dates. Exactly one of these five forms (the "kind" must be one of these
+strings, no other fields):
+  {"kind": "last_n_years", "n": <int >= 1>}          ("last 3 years")
+  {"kind": "last_n_months", "n": <int >= 1>}         ("last 6 months")
+  {"kind": "since_year", "year": <int <= current year>}   ("since 2020")
+  {"kind": "during_year", "year": <int <= current year>}  ("during 2022")
+  {"kind": "between", "start_year": <int>, "end_year": <int>}
+      ("2020 to 2022"; start_year <= end_year, both <= current year)
+For a relative expression OMIT "period" from the spec - nlbt resolves the
+concrete ISO dates in deterministic code with an injected clock, never you;
+never invent start/end dates. For explicit calendar dates give
 "period": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"} and leave
 period_expression null. Never output both.
 
@@ -402,11 +412,12 @@ ENVELOPE:
      "reason": "nlbt default (spec/defaults.py)"}
   ],
   "unsupported": [],
-  "period_expression": "last 3 years"
+  "period_expression": {"kind": "last_n_years", "n": 3}
 }
 <<<END_NLBT_BLOCK>>>
-nlbt computes the concrete dates in code (injected clock); you only pass the
-phrase through. Never invent start/end dates for a relative expression.
+nlbt computes the concrete dates in code (injected clock) from this structure;
+you only pass the expression through. Never invent start/end dates for a
+relative expression.
 """
 
 

@@ -20,11 +20,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from nlbt.errors import NLLlmError
+from nlbt.nl.dates import PeriodExpression
 
 __all__ = [
     "Envelope",
     "EnvelopeAssumption",
     "EnvelopeQuestion",
+    "PeriodExpression",
     "envelope_schema",
     "flatten_schema",
 ]
@@ -59,10 +61,11 @@ class Envelope(BaseModel):
     questions: list[EnvelopeQuestion] = []
     assumptions: list[EnvelopeAssumption] = []
     unsupported: list[str] = []
-    #: Raw relative-date phrase ("last 3 years") passed through untouched;
-    #: nlbt resolves it in code with an injected clock (S10, P6-T6) — the
-    #: model never computes dates. P6-T3: optional, defaults to null.
-    period_expression: str | None = None
+    #: Structured relative-date expression (P6-T6): a closed union of five
+    #: forms (e.g. {"kind": "last_n_years", "n": 3}) resolved to ISO dates by
+    #: code with an injected clock (S10) — the model never computes dates.
+    #: P6-T3: optional, defaults to null.
+    period_expression: PeriodExpression | None = None
 
 
 def envelope_schema() -> dict[str, Any]:

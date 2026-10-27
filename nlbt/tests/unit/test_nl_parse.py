@@ -41,6 +41,7 @@ from nlbt.nl.prompt import (
 from nlbt.nl.recorded import RecordedClient
 from nlbt.spec.defaults import DEFAULTS, resolve_date_range
 from nlbt.spec.models import StrategySpec
+from nlbt.spec.render import render_spec
 
 FIXED_TODAY = date(2026, 6, 15)  # injected clock (must be <= real today)
 TEXT = (
@@ -534,23 +535,118 @@ def test_strict_mode_blocks_on_unsupported_and_non_strict_records_it(
     assert allowed.unsupported == ["sentiment"]
 
 
-def test_period_expression_without_period_is_unsupported_not_a_guess(
-    tmp_path: Path,
-) -> None:
+def test_period_expression_resolves_via_injected_today(tmp_path: Path) -> None:
+    """P6-T6/S10: a structured period_expression is resolved BY CODE (OQ-0088).
+
+    Hand-computed: injected today 2026-06-15 minus 3 years = 2023-06-15
+    (no leap-day involved), end clipped to today. The window satisfies
+    ``start < end <= today`` and renders as ISO dates in English.
+    """
     text = "Buy QQQ when RSI is oversold, over the last 3 years."
     spec = ok_spec(universe={"symbols": ["QQQ"]})
     del spec["period"]
-    payload = {"status": "ok", "spec": spec, "period_expression": "last 3 years"}
+    payload = {
+        "status": "ok",
+        "spec": spec,
+        "period_expression": {"kind": "last_n_years", "n": 3},
+    }
     write_fixture(tmp_path, name="relative", user=build_user_message(text), payload=payload)
     client = recording_client(tmp_path)
 
     result = parse_text(text, client=client, today=FIXED_TODAY)
 
-    assert client.calls == 1
-    assert result.status == "unsupported"
-    assert result.spec is None
-    assert result.period_expression == "last 3 years"
-    assert any("period" in item for item in result.unsupported)
+    assert client.calls == 1  # no repair needed: resolution is deterministic
+    assert result.status == "ok"
+    assert isinstance(result.spec, StrategySpec)
+    assert result.spec is not None
+    # spec/models.py Period: start < end <= today, with today INJECTED
+    assert result.spec.period.start == date(2023, 6, 15)
+    assert result.spec.period.end == date(2026, 6, 15)
+    assert result.spec.period.start < result.spec.period.end <= FIXED_TODAY
+    # the resolution is disclosed on the assumptions (S6-style provenance)
+    assumptions = {a.field: a.value for a in result.assumptions}
+    assert assumptions["period.start"] == "2023-06-15"
+    assert assumptions["period.end"] == "2026-06-15"
+    # the expression itself survives on the result (structured, not a phrase)
+    assert result.period_expression is not None
+    assert result.period_expression.kind == "last_n_years"
+    # the resolved ISO dates appear in the English rendering
+    rendered = render_spec(result.spec)
+    assert "2023-06-15" in rendered
+    assert "2026-06-15" in rendered
+
+
+def test_period_and_period_expression_together_repair_then_fail(tmp_path: Path) -> None:
+    """OQ-D: 'Never output both' is a repairable E_NL_ENVELOPE error (P6-T6).
+
+    The exact error dict below mirrors parse.py's mutually-exclusive check;
+    after the 2 bounded repair rounds the run dies with E_NL_LLM (S4/C4) and
+    no partial result is ever returned.
+    """
+    text = TEXT
+    payload = {
+        "status": "ok",
+        "spec": ok_spec(),  # carries an explicit period
+        "period_expression": {"kind": "last_n_years", "n": 3},
+    }
+    expected_error = {
+        "code": "E_NL_ENVELOPE",
+        "path": "period_expression",
+        "message": "spec.period and period_expression are mutually exclusive",
+        "hint": (
+            "Omit spec.period for a relative expression, or omit "
+            "period_expression for explicit calendar dates."
+        ),
+    }
+    user0 = build_user_message(text)
+    user1 = build_user_message(text, repair_errors=[expected_error])
+    write_fixture(tmp_path, name="both0", user=user0, payload=payload)
+    write_fixture(tmp_path, name="both1", user=user1, payload=payload)
+    client = recording_client(tmp_path)
+
+    with pytest.raises(NLLlmError) as excinfo:
+        parse_text(text, client=client, today=FIXED_TODAY)
+
+    assert excinfo.value.code == "E_NL_LLM"
+    assert excinfo.value.details["rounds"] == 2
+    assert excinfo.value.details["errors"] == [expected_error]
+    assert client.calls == 3  # initial + exactly 2 repair rounds, then stop
+
+
+def test_future_period_expression_feeds_e_spec_range_into_repair(tmp_path: Path) -> None:
+    """An invalid expression raises the typed §4.8 date error into the loop.
+
+    Hand-derivable from nl/dates.py: year 2030 > today's year 2026 (injected
+    today 2026-06-15), so resolve_period raises SpecRangeError (E_SPEC_RANGE)
+    with path ``period_expression``; the model cannot fix it within 2 rounds.
+    """
+    text = "Buy QQQ when RSI is oversold, during 2030."
+    spec = ok_spec(universe={"symbols": ["QQQ"]})
+    del spec["period"]
+    payload = {
+        "status": "ok",
+        "spec": spec,
+        "period_expression": {"kind": "during_year", "year": 2030},
+    }
+    expected_error = {
+        "code": "E_SPEC_RANGE",
+        "path": "period_expression",
+        "message": "during_year year 2030 is in the future (today is 2026-06-15)",
+        "hint": "Use a year <= 2026, or omit the period to take nlbt's default.",
+    }
+    user0 = build_user_message(text)
+    user1 = build_user_message(text, repair_errors=[expected_error])
+    write_fixture(tmp_path, name="future0", user=user0, payload=payload)
+    write_fixture(tmp_path, name="future1", user=user1, payload=payload)
+    client = recording_client(tmp_path)
+
+    with pytest.raises(NLLlmError) as excinfo:
+        parse_text(text, client=client, today=FIXED_TODAY)
+
+    assert excinfo.value.code == "E_NL_LLM"
+    assert excinfo.value.details["rounds"] == 2
+    assert excinfo.value.details["errors"] == [expected_error]
+    assert client.calls == 3
 
 
 def test_temperature_zero_and_delimited_user_text() -> None:

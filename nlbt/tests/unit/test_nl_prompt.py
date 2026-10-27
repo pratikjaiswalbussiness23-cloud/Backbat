@@ -50,7 +50,7 @@ def _json_block(prompt: str, name: str) -> Any:
 
 
 def test_prompt_version_is_a_nonempty_string() -> None:
-    assert isinstance(PROMPT_VERSION, str) and PROMPT_VERSION == "1"
+    assert isinstance(PROMPT_VERSION, str) and PROMPT_VERSION == "2"
 
 
 def test_prompt_text_hash_matches_the_recorded_version_hash() -> None:
