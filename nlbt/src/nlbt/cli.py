@@ -45,8 +45,10 @@ from typer._click.exceptions import UsageError
 
 from nlbt.config import Config
 from nlbt.data.csv_provider import CSVProvider
-from nlbt.data.models import Bars, BarsMeta
+from nlbt.data.models import Bars, BarsMeta, DataProvider
 from nlbt.errors import NlbtError, SpecSchemaError
+from nlbt.nl.client import LLMClient
+from nlbt.nl.service import Interpretation, confirm_spec, interpret, run_confirmed
 from nlbt.results import execute_run
 from nlbt.results.store import build_result_payload, render_result_json
 from nlbt.spec import StrategySpec, render_spec, validate_spec
@@ -191,6 +193,14 @@ _RUNS_DIR_OPTION = typer.Option(
 )
 _NO_PERSIST_OPTION = typer.Option(False, "--no-persist", help="Do not write result.json to disk.")
 _JSON_OPTION = typer.Option(False, "--json", help="Print only the result payload as JSON.")
+_YES_OPTION = typer.Option(
+    False, "--yes", help="Confirm and run without the interactive prompt (logged; P6-T10)."
+)
+_ASK_TEXT_ARGUMENT = typer.Argument(..., help="Plain-English strategy request to translate.")
+
+#: Interactive confirmation prompt (P6-T10). Written to stdout normally, or
+#: to stderr under --json so stdout stays a single valid JSON document (Q4).
+_CONFIRM_PROMPT = "Confirm run? [y/N]: "
 
 
 @_APP.command("run")
@@ -226,6 +236,208 @@ def _run(
             warnings=result.warnings,
             data_quality_report=result.data_quality_report,
         )
+        typer.echo(render_result_json(payload))
+        return
+    result_path: Path | None = None
+    if not no_persist:
+        base = runs_dir if runs_dir is not None else Path(Config().runs_dir)
+        result_path = base / result.run_id / "result.json"
+    _echo_summary(result, result_path=result_path)
+
+
+# --------------------------------------------------------------------- ask (P6-T10)
+def _ask_llm_client() -> LLMClient:
+    """Default ``ask`` transport: the configured endpoint, with demo-mode
+    recordings from ``tests/fixtures/llm`` (``NLBT_LLM_DEMO=1`` replay).
+
+    Tests swap this boundary (AGENTS.md: mock only network/LLM boundaries).
+    """
+    # Lazy import (cli.py:135 precedent): ``nlbt run`` startup stays
+    # independent of the requests/transport module.
+    from nlbt.nl.openai_client import OpenAICompatibleClient
+
+    recordings = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
+    return OpenAICompatibleClient(recordings_dir=recordings if recordings.is_dir() else None)
+
+
+def _ask_data_provider(data_csv: str | None) -> DataProvider:
+    """``CSVProvider`` for ``--data-csv``; otherwise yfinance behind the
+    parquet cache (Q5: NLBT_OFFLINE-aware, same lazy-import rule as ``run``)."""
+    if data_csv is not None:
+        return CSVProvider()
+    from nlbt.data.cache import CachedProvider
+    from nlbt.data.yf_provider import YFinanceProvider
+
+    return CachedProvider(YFinanceProvider(), Config().data_cache_dir)
+
+
+def _confirm_run(*, prompt_to_stderr: bool) -> bool:
+    """Interactive gate (P6-T10): default N; EOF and anything but y = cancel."""
+    typer.echo(_CONFIRM_PROMPT, nl=False, err=prompt_to_stderr)
+    try:
+        answer = input()
+    except EOFError, OSError:
+        return False
+    return answer.strip().casefold() in {"y", "yes"}
+
+
+def _interpretation_json(interp: Interpretation, *, cancelled: bool) -> str:
+    """Q4: the deterministic stdout object for non-run outcomes."""
+    payload: dict[str, Any] = {
+        "status": interp.status,
+        "resolved_symbol": interp.resolved_symbol,
+        "questions": interp.questions,
+        "unsupported": interp.unsupported,
+        "assumptions": interp.assumptions,
+        "warnings": interp.warnings,
+        "rendering": interp.rendering,
+        "data_summary": interp.data_summary,
+    }
+    if cancelled:
+        payload["cancelled"] = True
+    return json.dumps(payload, allow_nan=False, sort_keys=True, indent=2)
+
+
+def _echo_ask_presentation(interp: Interpretation, *, data_csv: str | None, to_err: bool) -> None:
+    """Parsed summary + deterministic rendering + assumptions/warnings/
+    unsupported (the P6-T10 pre-confirmation presentation, S8/S5/S6)."""
+    if interp.spec is None:  # defensive: status ok always carries a spec
+        raise RuntimeError("interpretation status=ok without a spec")
+    spec = interp.spec
+    summary = interp.data_summary or {}
+
+    def out(line: str) -> None:
+        typer.echo(line, err=to_err)
+
+    out("status:  ok")
+    if interp.resolved_symbol is not None:
+        out(f"resolved symbol: {interp.resolved_symbol}")
+    source = f"csv {data_csv}" if data_csv is not None else str(summary.get("provider", "unknown"))
+    out(
+        f"data:    {source} | {summary.get('bars', 'n/a')} bars | "
+        f"{summary.get('start', 'n/a')}..{summary.get('end', 'n/a')}"
+    )
+    out(
+        f"spec:    {spec.name} | {spec.universe.symbols[0]} | "
+        f"{spec.period.start}..{spec.period.end} | {summary.get('bars', 'n/a')} bars"
+    )
+    out("assumptions:")
+    if interp.assumptions:
+        for assumption in interp.assumptions:
+            out(f"- {assumption['field']}: {assumption['value']} ({assumption['reason']})")
+    else:
+        out("- none")
+    if interp.warnings:
+        out("warnings:")
+        for warning in interp.warnings:
+            out(f"- {warning}")
+    else:
+        out("warnings: none")
+    if interp.unsupported:
+        out("unsupported:")
+        for unsupported_item in interp.unsupported:
+            out(f"- {unsupported_item}")
+    else:
+        out("unsupported: none")
+    out(interp.rendering)
+
+
+def _echo_ask_status(interp: Interpretation, *, json_out: bool) -> None:
+    """Non-ok outcomes: the Q4 JSON object, or the human status block.
+    Neither path ever reaches the confirmation prompt (Q3: exit 0)."""
+    if json_out:
+        typer.echo(_interpretation_json(interp, cancelled=False))
+        return
+    typer.echo(f"status:  {interp.status}")
+    if interp.resolved_symbol is not None:
+        typer.echo(f"resolved symbol: {interp.resolved_symbol}")
+    if interp.questions:
+        typer.echo("questions:")
+        for question in interp.questions:
+            typer.echo(f"- [{question['id']}] {question['question']}")
+    if interp.unsupported:
+        typer.echo("unsupported:")
+        for item in interp.unsupported:
+            typer.echo(f"- {item}")
+    if interp.warnings:
+        typer.echo("warnings:")
+        for warning in interp.warnings:
+            typer.echo(f"- {warning}")
+
+
+@_APP.command("ask")
+def _ask(
+    text: str = _ASK_TEXT_ARGUMENT,
+    yes: bool = _YES_OPTION,
+    data_csv: str | None = _DATA_CSV_OPTION,
+    runs_dir: Path | None = _RUNS_DIR_OPTION,
+    no_persist: bool = _NO_PERSIST_OPTION,
+    json_out: bool = _JSON_OPTION,
+) -> None:
+    """Translate text to a spec, show it for confirmation, then backtest.
+
+    Exit codes (owner ruling Q3): 0 for a confirmed run, for the
+    ``needs_clarification``/``unsupported`` statuses, and for user
+    cancellation (n/EOF); 1 for any ``NlbtError`` (``status=error`` is
+    re-raised so ``main`` prints ``[CODE] ...`` to stderr); 2 for usage
+    errors (typer). An unconfirmed spec can never run (Gate 7).
+    """
+    interp = interpret(
+        text,
+        client=_ask_llm_client(),
+        provider=_ask_data_provider(data_csv),
+        data_symbol_override=data_csv,
+    )
+    if interp.status == "error":
+        if interp.error is None:  # defensive: interpret always attaches one
+            raise RuntimeError("interpretation status=error without an error object")
+        raise interp.error  # main() prints [CODE] ... and returns 1
+    if interp.status != "ok":
+        _echo_ask_status(interp, json_out=json_out)
+        return
+    if interp.spec is None:  # defensive: status ok always carries a spec
+        raise RuntimeError("interpretation status=ok without a spec")
+
+    # Present first, then confirm -- an unconfirmed spec never runs (Gate 7).
+    if not (json_out and yes):
+        _echo_ask_presentation(interp, data_csv=data_csv, to_err=json_out)
+    if yes:
+        confirmation = confirm_spec(interp.spec, confirmed_via="flag")
+        typer.echo("confirmed: yes (--yes)", err=json_out)  # --yes is logged
+    elif not _confirm_run(prompt_to_stderr=json_out):
+        if json_out:
+            typer.echo(_interpretation_json(interp, cancelled=True))
+        else:
+            typer.echo("Run cancelled.")
+        return
+    else:
+        confirmation = confirm_spec(interp.spec, confirmed_via="interactive")
+        if not json_out:
+            typer.echo("confirmed: yes (interactive)")
+
+    data_source = (
+        {"kind": "csv", "path": data_csv}
+        if data_csv is not None
+        else {"kind": "yfinance", "symbol": interp.resolved_symbol}
+    )
+    result = run_confirmed(
+        interp,
+        confirmation,
+        data_source=data_source,
+        runs_dir=runs_dir,
+        persist=not no_persist,
+    )
+    if json_out:
+        # Same builder + serialiser as the stored result.json (P5-T5 rule).
+        payload = build_result_payload(
+            run_id=result.run_id,
+            manifest=result.manifest,
+            metrics=result.metrics,
+            benchmark_metrics=result.benchmark_metrics,
+            warnings=result.warnings,
+            data_quality_report=result.data_quality_report,
+        )
+        # Stored result.json ends with one newline; match it byte-for-byte.
         typer.echo(render_result_json(payload))
         return
     result_path: Path | None = None

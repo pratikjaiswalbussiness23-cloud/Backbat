@@ -31,6 +31,7 @@ NOT shell out to this CLI.
 
 ```text
 nlbt run SPEC.json [--data-csv FILE] [--rf 0.0] [--runs-dir DIR] [--no-persist] [--json]
+nlbt ask TEXT [--yes] [--data-csv FILE] [--runs-dir DIR] [--no-persist] [--json]
 nlbt validate-spec SPEC.json
 nlbt render-spec SPEC.json
 ```
@@ -47,6 +48,48 @@ nlbt render-spec SPEC.json
 path line, a spec line, a strategy-vs-benchmark metric table (undefined
 metrics render as `n/a` — `NaN`/`Infinity` are never printed) and the
 surfaced warnings.
+
+### `ask` (P6-T4/T5/T10, hackathon subset)
+
+`ask` translates plain-English strategy text with the configured
+`OpenAICompatibleClient`, validates and renders it deterministically, and
+verifies the parsed ticker by fetching bars through the selected provider.
+Without `--data-csv`, the CLI lazily uses `CachedProvider(YFinanceProvider(),
+Config().data_cache_dir)`; with `--data-csv FILE`, it uses `CSVProvider` and
+passes the CSV path as the provider's `symbol` argument. Provider fetch results
+are retained and reused for the backtest: a confirmed run does not fetch a
+second time.
+
+Before any run, the CLI presents the parsed summary, deterministic English
+rendering, assumptions, warnings, unsupported items and data summary. It then
+requires confirmation: `--yes` confirms non-interactively (and prints
+`confirmed: yes (--yes)`); otherwise the exact prompt is
+`Confirm run? [y/N]: `. Only `y`/`yes` confirms; `n`, empty input, EOF or any
+other response cancels. Clarification/unsupported responses are displayed and
+exit 0 without a confirmation prompt or a run. An `E_DATA_EMPTY` response
+becomes a clarification asking which symbol to use; no alternative ticker is
+suggested because the current providers do not support symbol search.
+
+| `ask` option | Meaning |
+|---|---|
+| `--yes` | Confirm the displayed spec without prompting; `user_confirmed_at` is recorded in `manifest.nl`. |
+| `--data-csv FILE` | Verify/load data from this CSV; its path is passed to `CSVProvider` while the resolved strategy symbol remains the parsed ticker. |
+| `--runs-dir DIR` | Where `<run_id>/result.json` is written (default: `NLBT_RUNS_DIR`). |
+| `--no-persist` | Do not write the result file. |
+| `--json` | On a run, print only the same result payload serializer as `result.json`; on clarification/unsupported/cancel, print the documented interpretation object. The interactive prompt and confirmation log go to stderr so stdout remains valid JSON. |
+
+The `ask` client uses `Config` for endpoint/model/key settings. If the
+endpoint is unreachable, it raises `E_NL_LLM` unless `NLBT_LLM_DEMO=1` and a
+matching recording exists under `tests/fixtures/llm`; demo replay emits the
+`[nlbt][DEMO]` warning on stderr and records `llm_source="recorded-demo"`.
+Missing credentials, offline mode, and a recording miss remain loud `E_NL_LLM`
+errors. Keys are not printed.
+
+`run_confirmed()` is the sole NL service path to `execute_run`: it requires a
+confirmation bound to both the logic and full spec hashes. Any edit after
+confirmation invalidates it. The NL manifest section is additive and
+conditional, preserving existing `nlbt run` manifest/golden output; the
+legacy `manifest.llm` fields remain null.
 
 `--help` carries: `Historical simulation only; not investment advice.`
 

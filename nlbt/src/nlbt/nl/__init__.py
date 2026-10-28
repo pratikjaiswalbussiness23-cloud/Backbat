@@ -18,17 +18,35 @@ from nlbt.nl.client import (
 from nlbt.nl.envelope import Envelope, envelope_schema, flatten_schema
 from nlbt.nl.openai_client import OpenAICompatibleClient
 from nlbt.nl.recorded import RecordedClient
+from nlbt.nl.service import (
+    Confirmation,
+    Interpretation,
+    Status,
+    UnconfirmedSpecError,
+    confirm_spec,
+    interpret,
+    require_confirmation,
+    run_confirmed,
+)
 
 __all__ = [
     "STRUCTURED_MODES",
+    "Confirmation",
     "Envelope",
+    "Interpretation",
     "LLMClient",
     "LLMResponse",
     "OpenAICompatibleClient",
     "RecordedClient",
     "Source",
+    "Status",
+    "UnconfirmedSpecError",
+    "confirm_spec",
     "envelope_schema",
     "flatten_schema",
+    "interpret",
     "request_fingerprint",
+    "require_confirmation",
+    "run_confirmed",
     "schema_sha256",
 ]
