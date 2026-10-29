@@ -15,6 +15,7 @@ dependencies = [
     "typer>=0.15,<1",
     "yfinance>=1.7,<2",  # P1-T3: yfinance provider (see OQ-0006, DEPENDENCIES.md)
     "requests>=2.32,<3",  # P6-T1: LLM client HTTP transport (was transitive via yfinance)
+    "streamlit>=1.66,<2",  # P7-T4: local hackathon UI
 ]
 
 [project.scripts]

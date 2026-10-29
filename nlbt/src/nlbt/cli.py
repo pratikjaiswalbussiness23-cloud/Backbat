@@ -43,7 +43,7 @@ from pydantic import ValidationError
 # pins the version, and docs/DEPENDENCIES.md records the dependency).
 from typer._click.exceptions import UsageError
 
-from nlbt.config import Config
+from nlbt.config import Config, load_nvidia_api_key
 from nlbt.data.csv_provider import CSVProvider
 from nlbt.data.models import Bars, BarsMeta, DataProvider
 from nlbt.errors import NlbtError, SpecSchemaError
@@ -256,8 +256,18 @@ def _ask_llm_client() -> LLMClient:
     # independent of the requests/transport module.
     from nlbt.nl.openai_client import OpenAICompatibleClient
 
+    config = Config()
+    if not config.nvidia_api_key:
+        candidates = (Path.cwd() / ".env", Path(__file__).resolve().parents[2] / ".env")
+        for env_file in dict.fromkeys(candidates):
+            key = load_nvidia_api_key(env_file)
+            if key:
+                config = config.model_copy(update={"nvidia_api_key": key})
+                break
     recordings = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
-    return OpenAICompatibleClient(recordings_dir=recordings if recordings.is_dir() else None)
+    return OpenAICompatibleClient(
+        config=config, recordings_dir=recordings if recordings.is_dir() else None
+    )
 
 
 def _ask_data_provider(data_csv: str | None) -> DataProvider:

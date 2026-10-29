@@ -22,12 +22,15 @@ Rules honoured here:
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nlbt.errors import NLLlmError
 
-__all__ = ["Config", "get_config", "reset_config"]
+__all__ = ["Config", "get_config", "load_nvidia_api_key", "reset_config"]
 
 
 class Config(BaseSettings):
@@ -100,6 +103,41 @@ class Config(BaseSettings):
                 details={"env_var": "ANTHROPIC_API_KEY"},
                 hint="Set ANTHROPIC_API_KEY in your environment (see .env.example)",
             )
+
+
+def _parse_env_file(path: Path) -> dict[str, str]:
+    """Parse the project's simple .env format without exporting any values."""
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return {}
+    entries: dict[str, str] = {}
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()  # removes CR and surrounding whitespace
+        if not line or line.startswith("#"):
+            continue
+        name, separator, value = line.partition("=")
+        if not separator:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        entries[name.strip()] = value
+    return entries
+
+
+def load_nvidia_api_key(env_file: Path | None = None) -> str | None:
+    """Return the environment key or read it locally from an optional .env.
+
+    Environment is authoritative. File values stay in local variables: this
+    helper never modifies os.environ and never logs or prints credentials.
+    """
+    key = os.environ.get("NVIDIA_API_KEY")
+    if key:
+        return key
+    if env_file is None:
+        return None
+    return _parse_env_file(env_file).get("NVIDIA_API_KEY") or None
 
 
 _config: Config | None = None

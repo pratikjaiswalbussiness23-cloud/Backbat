@@ -456,7 +456,10 @@ def _gate_checks(
 
     if strict and unsupported:
         return "unsupported", None, unsupported
-    if "stop" in text.casefold() and not (spec_dict.get("risk") or {}).get("stop_loss_pct"):
+    risk = spec_dict.get("risk") or {}
+    if "stop" in text.casefold() and not any(
+        risk.get(field) for field in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct")
+    ):
         return (
             "needs_clarification",
             [{"id": "stop_target_mentioned_without_number", "question": STOP_QUESTION}],
