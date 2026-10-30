@@ -1,0 +1,14 @@
+# Streamlit theme for the nlbt UI.
+# Streamlit reads this from the working directory, so start the server from
+# nlbt/ (`uv run streamlit run src/nlbt/ui/app.py`) for it to apply.
+
+[theme]
+base = "dark"
+primaryColor = "#00E5A0"
+backgroundColor = "#0B0F17"
+secondaryBackgroundColor = "#131A26"
+textColor = "#E6EDF7"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
