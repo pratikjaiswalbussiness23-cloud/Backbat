@@ -4,99 +4,67 @@
 
 Historical simulation only; not investment advice.
 
-`nlbt` is a natural-language trading strategy backtester. You describe a
-strategy in plain English; nlbt turns it into a validated JSON `StrategySpec`,
-renders back exactly what will run (in deterministic English, with every
-assumption disclosed), makes you confirm it, then backtests it with a
-deterministic Python engine and reports auditable metrics, a trade log and a
-run manifest.
+## Overview
+
+`nlbt` is a natural-language trading strategy backtester:
+
+**plain-English strategy → schema-forced LLM translation to a validated JSON
+`StrategySpec` → deterministic back-translation to English + explicit user
+confirmation gate → deterministic Python backtest engine → auditable metrics,
+trade log, and run manifest.**
 
 The division of labour is strict (ROADMAP.md §0.3, principles C1–C5):
 
-- **The LLM only translates.** It never computes numbers, never simulates
-  trades and never writes code that gets executed. Its output must pass a
-  JSON Schema, pydantic validation and semantic validation (with at most 2
-  repair rounds) before anything runs.
-- **Every number is produced by tested code** and is traceable to the run
+- **The LLM only translates.** It never computes a number, never simulates a
+  trade and never emits code that gets executed. Its output must pass a JSON
+  Schema, pydantic validation and semantic validation (at most **2 repair
+  rounds**) before anything runs.
+- **Every number comes from tested code** and is traceable through the run
   manifest: fees, slippage, fills, metrics and the benchmark all come from the
   same deterministic engine.
-- **Fail loudly.** Unknown, unsupported or ambiguous input becomes a typed
-  error or a clarifying question — never a silent guess.
-
-## How it works
-
-1. **Plain-English strategy text** (CLI `nlbt ask`, or the Streamlit UI).
-2. **Schema-forced LLM translation** to a JSON *envelope* (`status`, `spec`,
-   `questions`, `assumptions`, `unsupported`, `period_expression`) at
-   temperature 0 against the generated `StrategySpec` JSON Schema.
-3. **Validation chain:** pydantic model → semantic validator → deterministic
-   gates, with the exact errors fed back to the model for at most **2 repair
-   rounds** before `E_NL_LLM` is raised (no partial spec is ever returned).
-4. **Deterministic date resolution** — relative phrasing ("last 3 years") is
-   resolved to ISO dates in code with an injected clock, never by the model.
-5. **Symbol verification** — bars are actually fetched for the parsed ticker;
-   no data → clarification, never an invented symbol.
-6. **Deterministic English rendering** of the validated spec (`render-spec`)
-   so the user sees exactly what will run.
-7. **User confirmation gate (Gate 7)** — an unconfirmed (or edited-after-
-   confirmation) spec cannot run; the confirmation is bound to the logic and
-   full spec hashes.
-8. **Deterministic bar-loop engine** on the same bars that were verified
-   (exactly one provider fetch per confirmed run).
-9. **Settled-series metrics & benchmark**, warnings surfaced, then a
-   **`RunResult` + manifest** (`runs/<run_id>/result.json`).
-
-```mermaid
-flowchart TD
-    A[User Text] --> B[LLM<br/>schema-forced, temperature 0]
-    B --> C[Envelope JSON<br/>status / spec / questions / assumptions / unsupported]
-    C --> D[Pydantic + Semantic Validation<br/>max 2 repair rounds]
-    D -->|invalid after repairs| X1[E_NL_LLM<br/>no partial result]
-    D -->|needs_clarification / unsupported| X2[Question or typed refusal<br/>nothing runs]
-    D -->|ok| E[Deterministic Date Resolution<br/>injected clock]
-    E --> F[Symbol Verification<br/>fetch bars once]
-    F --> G[Deterministic English Rendering<br/>render_spec]
-    G --> H[User Confirmation Gate<br/>bound to spec hashes]
-    H -->|not confirmed / edited| X3[UnconfirmedSpecError<br/>E_NL_UNCONFIRMED]
-    H -->|confirmed| I[Deterministic Bar-Loop Engine<br/>no lookahead, next_open fills]
-    I --> J[Settled-Series Metrics & Benchmark]
-    J --> K[RunResult + Manifest<br/>runs/&lt;run_id&gt;/result.json]
-```
+- **Fail loudly.** Ambiguous, unsupported or unconfirmed input stops the
+  pipeline with a clarifying question or a typed error — never a silent guess.
+  Nothing runs until the user confirms the exact spec that will run.
 
 ## Quick start
 
 Requirements: Python **3.14** and [uv](https://docs.astral.sh/uv/)
 (`pip install uv`).
 
+Install:
+
 ```bash
 uv sync
 ```
 
-Run a JSON spec (no LLM involved — this path sends nothing over the network):
+Run a JSON spec (no LLM — this path makes zero LLM calls):
 
 ```bash
-uv run nlbt run tests/fixtures/spec/cli_golden.json \
-  --data-csv tests/fixtures/csv/demo_spy_daily.csv --no-persist
+uv run nlbt run tests/fixtures/spec/cli_golden.json --data-csv tests/fixtures/csv/cli_daily.csv --no-persist
 ```
 
-Ask in plain English (interactive confirmation; `--yes` confirms without prompting):
+Ask in plain English (offline recorded demo mode):
 
 ```bash
-uv run nlbt ask "Buy SPY when RSI(14) is below 30, sell when RSI(14) is above 70, and use a 5% stop loss from 2024-01-02 to 2025-12-31." \
-  --data-csv tests/fixtures/csv/demo_spy_daily.csv
+NLBT_LLM_DEMO=1 uv run nlbt ask "Buy SPY when RSI(14) is under 30 and sell when RSI(14) is above 70, with a 5% stop loss, from 2024-01-02 to 2025-12-31." --data-csv tests/fixtures/csv/demo_spy_daily.csv --yes --no-persist
 ```
 
-Recorded Demo Mode (offline replay of recorded LLM responses — no live model
-call for the translation):
-
-```bash
-# Recorded fixtures are keyed to the default model id: leave NLBT_LLM_MODEL unset.
-# An unreachable endpoint + NLBT_LLM_DEMO=1 makes the client replay the matching
-# recording (labelled "[nlbt][DEMO] ..." on stderr, llm_source="recorded-demo").
-NLBT_LLM_DEMO=1 NVIDIA_API_KEY=unused NLBT_LLM_BASE_URL=http://127.0.0.1:9/v1 \
-  uv run nlbt ask "Buy SPY when RSI(14) is below 30, sell when RSI(14) is above 70, and use a 5% stop loss from 2024-01-02 to 2025-12-31." \
-  --data-csv tests/fixtures/csv/demo_spy_daily.csv --yes --no-persist
-```
+> Verified caveat: the CLI replays a recording only when the endpoint is
+> **unreachable** and the prompt matches one of the five built-in demo prompts
+> (`src/nlbt/ui/demo_cases.py`). The command above therefore makes a live call
+> if your key and endpoint are configured. For a guaranteed offline replay,
+> use demo prompt 2's exact wording, a placeholder key (so the gitignored
+> `nlbt/.env` is never read) and an unreachable port — this is the form
+> verified in [`docs/demo_script.md`](docs/demo_script.md):
+>
+> ```bash
+> NLBT_LLM_DEMO=1 NVIDIA_API_KEY=unused NLBT_LLM_BASE_URL=http://127.0.0.1:9/v1 \
+>   uv run nlbt ask "Buy SPY when RSI(14) is below 30, sell when RSI(14) is above 70, and use a 5% stop loss from 2024-01-02 to 2025-12-31." \
+>   --data-csv tests/fixtures/csv/demo_spy_daily.csv --yes --no-persist
+> ```
+>
+> Successful replay is labelled on stderr:
+> `[nlbt][DEMO] serving RECORDED LLM response -- endpoint unreachable; output is NOT from the model`.
 
 Launch the Streamlit UI:
 
@@ -107,120 +75,139 @@ uv run streamlit run src/nlbt/ui/app.py
 In the sidebar choose the data source (`Bundled Demo CSV (offline)`), the LLM
 mode (`Recorded Demo Mode (offline)` or `Live NIM (with Recorded Demo
 fallback)`) and one of the five built-in demo prompts, then **Interpret →
-Confirm Spec → Run Confirmed Backtest**. See `docs/demo_script.md` for the
-scripted demo.
+Confirm Spec → Run Confirmed Backtest**. Full walkthrough:
+[`docs/demo_script.md`](docs/demo_script.md).
 
-Other commands:
+Other commands (details in [`docs/cli.md`](docs/cli.md)):
 
 | Command | What it does |
 |---|---|
-| `mingw32-make all` | ruff check + format check + mypy strict + pytest with coverage (the task gate) |
-| `mingw32-make lint` / `type` / `test` | each gate on its own |
 | `uv run nlbt validate-spec SPEC.json` | schema + semantic validation |
 | `uv run nlbt render-spec SPEC.json` | deterministic English rendering |
+| `mingw32-make all` | ruff check + format check + mypy strict + pytest with coverage (the project gate) |
 
-(On Windows without GNU `make` on PATH, `mingw32-make` is equivalent.)
+## Architecture
 
-## Execution & fill model (summary)
+```mermaid
+flowchart TD
+    A["User Text"] --> B["Schema-Forced LLM"]
+    B --> C["Envelope"]
+    C --> D["Pydantic + Semantic Validation<br/>(max 2 repair rounds)"]
+    D --> E["Deterministic Date Resolution"]
+    E --> F["Symbol Verification"]
+    F --> G["Deterministic English Rendering"]
+    G --> H["User Confirmation Gate"]
+    H --> I["Deterministic Bar-Loop Engine"]
+    I --> J["Settled-Series Metrics &amp; Benchmark"]
+    J --> K["RunResult + Manifest"]
+```
+
+Anything that fails validation, cannot be resolved deterministically, is
+ambiguous/unsupported, or is not confirmed stops the pipeline with a typed
+error or a clarifying question — no partial result is ever executed.
+
+## How fills & execution work
 
 - **No lookahead.** Signals are computed only from data at or before bar `t`
-  (`<= t`); entries and exits **fill at the next bar's open** (`fill =
-  next_open`, the only v1 convention).
-- **Costs on both sides:** adverse slippage plus fees per side — defaults are
-  **5 bps fee + 5 bps slippage** (configurable per spec: `fee_bps`,
-  `slippage_bps`, `fixed_fee`).
+  (`<= t`); entries and exits **fill at the next bar's open** (`t+1` open) —
+  the only v1 fill convention.
+- **Costs on both sides:** adverse slippage plus fees per side. Defaults are
+  **5 bps fee + 5 bps slippage** (per spec: `fee_bps`, `slippage_bps`,
+  `fixed_fee`).
 - **Intrabar risk exits**, checked in bar order: stop-loss, take-profit,
-  **ratcheted trailing stop** and `max_holding_bars` (see
-  `docs/limitations.md` for the known take-profit/trailing-stop precedence
-  caveat, OQ-0063).
+  **ratcheted trailing stop** and `max_holding_bars`. (Known caveat: on a bar
+  where both a take-profit and a trailing stop are reachable, take-profit is
+  checked first today — OQ-0063 in [`docs/limitations.md`](docs/limitations.md).)
 - **End of data:** a position still open after the last bar is force-closed at
-  the last close with slippage (`exit_reason="end_of_data"`), and metrics are
-  computed on the resulting *settled* equity series.
-- The benchmark is a buy-and-hold run through the **same engine**, same data,
-  same costs, so the comparison is apples to apples (details and caveats in
-  `docs/metrics.md`).
+  the **last close with slippage** (`exit_reason="end_of_data"`), and metrics
+  are computed on the resulting *settled* equity series.
+- The benchmark is a buy-and-hold run through the **same engine** — same data,
+  same costs, same capital — so the comparison is apples to apples (caveats in
+  [`docs/metrics.md`](docs/metrics.md)).
 
-## Metric definitions (summary)
+## Metric definitions summary
 
-Full definitions live in [`docs/metrics.md`](docs/metrics.md). Highlights:
+Full definitions: [`docs/metrics.md`](docs/metrics.md).
 
 - All metrics are computed on the **settled equity series** (last value
-  replaced by realized `final_equity` after a forced `end_of_data` close).
+  replaced by the realized `final_equity` after a forced `end_of_data` close).
 - **Undefined ⇒ `null` + a surfaced warning — never `0`, `NaN` or `inf`**
   (zero variance ⇒ Sharpe null; zero drawdown ⇒ Calmar null; fewer than 2 bars
   ⇒ all return metrics null; ...). The CLI prints `n/a` for those.
-- **`rf` is always reported** as `risk_free_rate` next to Sharpe.
+- **`rf` is always reported** as `risk_free_rate`, next to Sharpe.
 - **Profit factor is NET basis:** `sum(net_pnl > 0) / abs(sum(net_pnl < 0))`,
   `null` + warning when there are no losses.
 - `bars_per_year` is derived from the data frequency (or explicitly supplied),
   never silently hardcoded.
 
+More reading: [`docs/cli.md`](docs/cli.md) (commands, flags, exit codes) ·
+[`docs/demo_script.md`](docs/demo_script.md) (offline demo) ·
+[`docs/limitations.md`](docs/limitations.md) (honest inventory of what nlbt
+does not do).
+
 ## The trust story
 
-Numbers below come from a full run of `uv run pytest --cov
---cov-report=term-missing` on 2026-10-29 (`mingw32-make all` runs the same
-suite):
+Numbers below are from `mingw32-make all` (`uv run pytest --cov
+--cov-report=term-missing --cov-report=xml`), verified 2026-10-30:
 
 ```
-1025 passed, 1 skipped, 3 deselected in 227.48s (0:03:47)
-TOTAL                                   3701    342   1032    122  88.3%
+1025 passed, 1 skipped, 3 deselected
+TOTAL    3701    342    1032    122    88.3%
 ```
 
-- **1,025 passing tests** (plus 1 skipped, 3 deselected), **88.3 %** line +
-  branch coverage overall; `engine/backtest.py` 99.6 %, `engine/risk.py`
-  95.6 %, `metrics/` 94.3 %/100 %.
-- **Hypothesis property tests** for all engine invariants **I1–I14**
-  (`tests/property/test_engine_invariants.py`).
-- **No-lookahead defences:** truncation and future-poison tests for every
-  indicator and the full engine (`tests/property/test_indicator_truncation.py`,
-  `tests/property/test_engine_lookahead.py`), with a **red-on-leak canary
-  test** that fails loudly if the leak detector stops working (Gate 2/Gate 4).
-- **Differential tests against an independent oracle** — `backtesting.py`
-  0.6.6 — scenarios **S1–S6** in `tests/differential/`, every difference
-  explained in writing in [`docs/differential_notes.md`](docs/differential_notes.md)
-  (Gate 4 requires zero unexplained differences).
+- **1,025 passing tests** (1 skipped, 3 deselected) and **88.3 %** combined
+  line + branch coverage overall — with the three core packages above the
+  90 % target: **`engine` 92.87 %, `metrics` 96.53 %, `spec` 92.40 %,
+  92.95 % combined across all three.**
+- **Hypothesis property tests** on the engine invariants **I1–I14**
+  (`tests/property/test_engine_invariants.py`) — counterexamples shrink, they
+  are never seeded away.
+- **No-lookahead defences:** truncation and future-poison lookahead tests for
+  every indicator and for the full engine
+  (`tests/property/test_indicator_truncation.py`,
+  `tests/property/test_engine_lookahead.py`), plus a **red-on-leak canary
+  test** that fails loudly if the leak detector itself ever stops working.
+- **Differential tests against an independent tool:** scenarios **S1–S6**
+  compared trade-by-trade and row-by-row against **`backtesting.py 0.6.6`**
+  (`tests/differential/`); every difference is written up in
+  [`docs/differential_notes.md`](docs/differential_notes.md) and unexplained
+  differences block the gate.
 - **Byte-identical determinism:** same spec + same data + same code ⇒
-  byte-identical result; `--json` stdout is byte-identical to the stored
-  `result.json`.
-- **Golden CLI integration tests** (`tests/golden/`, `tests/integration/`);
-  regenerating a golden file requires an explicit owner-approved change
-  (ROADMAP §8.4 — agents may not "update goldens" to go green).
+  byte-identical `result.json` — verified across a **fresh `git clone`**
+  (`uv sync` in the clone, same command, identical result after the documented
+  volatile fields are dropped).
+- **Golden CLI integration tests** (`tests/golden/`,
+  `tests/integration/test_cli.py`); regenerating a golden file requires an
+  explicit owner-approved PR — agents may not "update goldens" to go green.
 - **12 indicators** in the registry (`adx, atr, bbands, ema, highest, lowest,
-  macd, obv, roc, rsi, sma, stoch`), each with hand-vector + oracle + warm-up
-  + truncation tests; the schema, prompt, docs and validator are all generated
+  macd, obv, roc, rsi, sma, stoch`), each with hand-vector + oracle + warm-up +
+  truncation tests; the schema, prompt, docs and validator are all generated
   from that single registry (C7).
-
-Engine speed, from the committed benchmark output
-(`benchmarks/last_run_output.txt`, 2026-10-18, Windows 11 / Python 3.14.4):
-
-```
-bars=2500    time=0.116 s  (21,528 bars/s)
-bars=100000  time=4.514 s  (22,154 bars/s)
-```
 
 ## Privacy & LLM provider
 
-- **What leaves your machine:** only the strategy text (the message you typed)
-  is sent to the configured OpenAI-compatible endpoint for `nlbt ask` /
-  Live-LLM UI mode. Prices, results and the manifest stay local.
-- **Default endpoint:** NVIDIA NIM, `https://integrate.api.nvidia.com/v1`
+- **What leaves your machine:** only the strategy text you typed is sent to
+  the configured OpenAI-compatible endpoint, and only on the `nlbt ask` /
+  Live-LLM UI path. Prices, results and the manifest stay local.
+- **Default endpoint:** NVIDIA NIM `https://integrate.api.nvidia.com/v1`
   (`NLBT_LLM_BASE_URL` overrides it); the model id comes from `NLBT_LLM_MODEL`
   and is never hard-coded.
 - **Trial caveat:** NIM access is under the **NVIDIA API Trial Terms of
-  Service** — evaluation/development use only, not for production trading.
-- **No-LLM mode:** `nlbt run` with a JSON spec performs **zero network calls**
-  — no LLM call, and data comes from `--data-csv` or the parquet cache.
-- **API key** is read from the `NVIDIA_API_KEY` environment variable or the
-  gitignored `nlbt/.env` (never exported, never printed), and key-like values
-  are redacted from logs and exceptions.
+  Service** — evaluation/development use only, **not for production**.
+- **No-LLM mode:** `nlbt run` with a JSON spec makes **zero LLM calls** —
+  nothing leaves the machine (data comes from `--data-csv` or the local
+  parquet cache).
+- **API key:** read from the `NVIDIA_API_KEY` environment variable or the
+  gitignored `nlbt/.env`; never printed, and key-like values are redacted from
+  logs and exceptions.
 
 ## Known limitations
 
 Open questions and deferred scope are inventoried honestly in
-[`docs/limitations.md`](docs/limitations.md) (the owner still has to sign it —
-Gate 10). Highlights: long-only v1 (shorts gated), daily bars only, one symbol
-per run, take-profit is currently checked before the trailing stop on a shared
-bar (OQ-0063), no `nlbt replay` yet.
+[`docs/limitations.md`](docs/limitations.md). Highlights: long-only v1
+(shorts gated), daily bars only, one symbol per run, take-profit currently
+checked before the trailing stop on a shared bar (OQ-0063), `nlbt replay` not
+built yet. Known limitations are published, not buried.
 
 ## Project layout
 
@@ -234,7 +221,7 @@ nlbt/
 └── Makefile           mingw32-make all = lint + type + test
 ```
 
-## Not financial advice
+## Disclaimer
 
 This project produces historical simulations, not predictions. **Historical
 simulation only; not investment advice.**
