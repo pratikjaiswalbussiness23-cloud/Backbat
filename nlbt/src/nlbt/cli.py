@@ -529,4 +529,8 @@ def _serve_cli(
     ``uv run nlbt serve`` or ``python -m nlbt server``
     """
     from nlbt.server import main as _server_main
-    raise SystemExit(_server_main(argv=["--host", host, "--port", str(port), "--reload"] if reload else ["--host", host, "--port", str(port)]))
+
+    server_args = ["--host", host, "--port", str(port)]
+    if reload:
+        server_args.append("--reload")
+    raise SystemExit(_server_main(argv=server_args))

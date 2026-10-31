@@ -18,29 +18,25 @@ Static UI at /ui served from ./static/index.html
 
 from __future__ import annotations
 
-import json
-import os
-from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from nlbt.config import Config
 from nlbt.errors import NlbtError
-from nlbt.nl.client import LLMClient
+from nlbt.nl.openai_client import OpenAICompatibleClient
 from nlbt.nl.service import (
     Confirmation,
     Interpretation,
     UnconfirmedSpecError,
-    confirm_spec,
     interpret,
     run_confirmed,
 )
-from nlbt.results import execute_run
+from nlbt.results.store import build_result_payload, render_result_json
 from nlbt.spec.models import StrategySpec
 
 app = FastAPI(title="nlbt", version="0.1.0")
@@ -56,7 +52,7 @@ if _PROJECT_ROOT.is_dir():
 
 
 @app.get("/ui", include_in_schema=False)
-async def ui_root():
+async def ui_root() -> FileResponse:
     """Serve the static HTML UI at /ui."""
     return FileResponse(str(_PROJECT_ROOT / "index.html"))
 
@@ -72,7 +68,7 @@ class InterpretRequest(BaseModel):
 
 class InterpretResponse(BaseModel):
     status: str
-    spec: dict | None = None
+    spec: dict[str, Any] | None = None
     rendering: str = ""
     assumptions: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -103,7 +99,11 @@ async def api_interpret(req: InterpretRequest) -> InterpretResponse:
     """Translate text → interpretation (same logic as ``nlbt ask``)."""
     try:
         config = Config()
-        client = LLMClient(config=config)
+        recordings = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
+        client = OpenAICompatibleClient(
+            config=config,
+            recordings_dir=recordings if recordings.is_dir() else None,
+        )
         from nlbt.data.cache import CachedProvider
         from nlbt.data.yf_provider import YFinanceProvider
 
@@ -117,7 +117,6 @@ async def api_interpret(req: InterpretRequest) -> InterpretResponse:
             data_symbol_override=data_symbol_override,
         )
 
-        # Build response mirroring the Interpretation dataclass
         error_dict = None
         if interp.error is not None:
             error_dict = {
@@ -129,11 +128,7 @@ async def api_interpret(req: InterpretRequest) -> InterpretResponse:
 
         return InterpretResponse(
             status=interp.status,
-            spec=(
-                {k: v for k, v in interp.spec.model_dump().items()}
-                if interp.spec is not None
-                else None
-            ),
+            spec=(dict(interp.spec.model_dump().items()) if interp.spec is not None else None),
             rendering=interp.rendering,
             assumptions=interp.assumptions,
             warnings=interp.warnings,
@@ -174,14 +169,9 @@ async def api_interpret(req: InterpretRequest) -> InterpretResponse:
 async def api_confirm(req: ConfirmRequest) -> dict[str, str]:
     """Freeze a confirmation (both hashes + timestamp + channel)."""
     try:
-        # We need the spec to validate the hashes; accept the hashes from the body
-        # and return a confirmation object
-        # The UI will have the spec; we just validate the hashes match what we see
-        # For now, we reconstruct from what the UI sends
-        # In a full implementation, the /run endpoint would have the spec too
         return {"status": "confirmed"}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -193,11 +183,9 @@ async def api_confirm(req: ConfirmRequest) -> dict[str, str]:
 async def api_run(req: RunRequest) -> dict[str, Any]:
     """Run a confirmed interpretation and return the result payload."""
     try:
-        # Rebuild Interpretation from the dict sent by the UI
         interp_dict = req.interp
         confirmation_dict = req.confirmation
 
-        # Reconstruct Interpretation
         interp = Interpretation(
             status=interp_dict.get("status", "ok"),
             spec=(
@@ -215,14 +203,9 @@ async def api_run(req: RunRequest) -> dict[str, Any]:
             bars=interp_dict.get("bars"),
             bars_meta=interp_dict.get("bars_meta"),
             nl_meta=interp_dict.get("nl_meta"),
-            error=(
-                interp_dict.get("error")
-                if interp_dict.get("status") == "error"
-                else None
-            ),
+            error=(interp_dict.get("error") if interp_dict.get("status") == "error" else None),
         )
 
-        # Reconstruct Confirmation
         confirmation = Confirmation(
             spec_hash_logic=confirmation_dict.get("spec_hash_logic", ""),
             spec_hash_full=confirmation_dict.get("spec_hash_full", ""),
@@ -230,17 +213,13 @@ async def api_run(req: RunRequest) -> dict[str, Any]:
             confirmed_via="ui",
         )
 
-        # Validate confirmation
         confirmed = run_confirmed(
             interp=interp,
             confirmation=confirmation,
-            data_source=None,  # will use yfinance default
+            data_source=None,
             runs_dir=None,
             persist=True,
         )
-
-        # Build result payload (same as CLI _echo_summary / build_result_payload)
-        from nlbt.results.store import build_result_payload, render_result_json
 
         payload = build_result_payload(
             run_id=confirmed.run_id,
@@ -261,15 +240,11 @@ async def api_run(req: RunRequest) -> dict[str, Any]:
         }
 
     except UnconfirmedSpecError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except NLUnsupportedError as exc:  # type: ignore[name-error]  # noqa: F821
-        raise HTTPException(status_code=422, detail=str(exc))
-    except NLAmbiguousError as exc:  # type: ignore[name-error]  # noqa: F821
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except NlbtError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:  # unexpected
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -289,11 +264,14 @@ def main(argv: list[str] | None = None) -> int:
     i = 0
     while i < len(args):
         if args[i] == "--host" and i + 1 < len(args):
-            host = args[i + 1]; i += 2
+            host = args[i + 1]
+            i += 2
         elif args[i] == "--port" and i + 1 < len(args):
-            port = int(args[i + 1]); i += 2
+            port = int(args[i + 1])
+            i += 2
         elif args[i] == "--reload":
-            reload = True; i += 1
+            reload = True
+            i += 1
         else:
             i += 1
 
@@ -310,12 +288,11 @@ if __name__ == "__main__":
 # Start-up smoke test (when imported as ``nlbt.server`` module)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @app.on_event("startup")
-async def _smoke_test():
+async def _smoke_test() -> None:
     """Light smoke test at startup so we know the import chain works."""
-    # We deliberately do NOT call any LLM here; just verify the app mounts
-    # and the routes are registered.
-    route_paths = {r.path for r in app.routes}
+    route_paths = {getattr(r, "path", None) for r in app.routes}
     essential = {"/interpret", "/confirm", "/run", "/ui"}
     missing = essential - route_paths
     if missing:

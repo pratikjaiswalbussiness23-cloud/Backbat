@@ -21,7 +21,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
-
         with:
           python-version: "3.14"
           enable-cache: true
@@ -34,6 +33,11 @@ jobs:
 
       - name: Enforce coverage floor (initial target; raised in later phases)
         run: uv run coverage report --fail-under=80
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
 
       - name: Upload coverage artifact
         if: always()

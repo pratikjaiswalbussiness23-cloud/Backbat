@@ -154,9 +154,7 @@ DEMO_CASES: tuple[DemoCase, ...] = (
                         {"left": {"name": "slow"}, "op": ">", "right": {"name": "close"}},
                     ]
                 },
-                "exit_long": {
-                    "all": [{"left": {"name": "rsi2"}, "op": ">", "right": 70.0}]
-                }
+                "exit_long": {"all": [{"left": {"name": "rsi2"}, "op": ">", "right": 70.0}]},
             },
             "risk": {"stop_loss_pct": 5.0},
             "sizing": {"method": "percent_of_equity", "value": 100.0},
@@ -167,7 +165,8 @@ DEMO_CASES: tuple[DemoCase, ...] = (
         title="Lower BB Reclaim + ROC Slope + ATR Floor",
         prompt=(
             "Buy SPY when low <= BB lower AND close > BB lower AND ROC(3) > -2, "
-            "exit when close >= BB middle, 2% stop 5% target 3-bar max hold, from 2024-01-02 to 2025-12-31."
+            "exit when close >= BB middle, 2% stop 5% target 3-bar max hold, "
+            "from 2024-01-02 to 2025-12-31."
         ),
         status="ok",
         spec={
@@ -190,7 +189,7 @@ DEMO_CASES: tuple[DemoCase, ...] = (
                 },
                 "exit_long": {
                     "all": [{"left": {"name": "close"}, "op": ">=", "right": {"name": "bb.middle"}}]
-                }
+                },
             },
             "risk": {"stop_loss_pct": 2.0, "take_profit_pct": 5.0},
             "sizing": {"method": "percent_of_equity", "value": 100.0},
@@ -215,7 +214,11 @@ DEMO_CASES: tuple[DemoCase, ...] = (
             "rules": {
                 "entry_long": {
                     "all": [
-                        {"left": {"name": "adx.plus_di"}, "op": "crosses_above", "right": {"name": "adx.minus_di"}},
+                        {
+                            "left": {"name": "adx.plus_di"},
+                            "op": "crosses_above",
+                            "right": {"name": "adx.minus_di"},
+                        },
                         {"left": {"name": "adx.adx"}, "op": ">", "right": 20.0},
                     ]
                 }
@@ -229,7 +232,8 @@ DEMO_CASES: tuple[DemoCase, ...] = (
         title="MACD Histogram + 50 EMA Trend",
         prompt=(
             "Buy SPY when MACD histogram crosses above 0 AND close > EMA(50), "
-            "exit when MACD histogram crosses below 0, 4% stop 10% target, from 2024-01-02 to 2025-12-31."
+            "exit when MACD histogram crosses below 0, 4% stop 10% target, "
+            "from 2024-01-02 to 2025-12-31."
         ),
         status="ok",
         spec={
@@ -238,7 +242,11 @@ DEMO_CASES: tuple[DemoCase, ...] = (
             "universe": {"symbols": ["SPY"], "interval": "1d"},
             "period": {"start": START, "end": END},
             "indicators": {
-                "macd": {"type": "macd", "params": {"fast": 12, "signal": 9, "slow": 26}, "source": "close"},
+                "macd": {
+                    "type": "macd",
+                    "params": {"fast": 12, "signal": 9, "slow": 26},
+                    "source": "close",
+                },
                 "ema50": {"type": "ema", "params": {"period": 50}, "source": "close"},
             },
             "rules": {
@@ -248,9 +256,7 @@ DEMO_CASES: tuple[DemoCase, ...] = (
                         {"left": {"name": "close"}, "op": ">", "right": {"name": "ema50"}},
                     ]
                 },
-                "exit_long": {
-                    "all": [{"left": {"name": "macd.hist"}, "op": "<", "right": 0}]
-                }
+                "exit_long": {"all": [{"left": {"name": "macd.hist"}, "op": "<", "right": 0}]},
             },
             "risk": {"stop_loss_pct": 4.0, "take_profit_pct": 10.0},
             "sizing": {"method": "percent_of_equity", "value": 100.0},
