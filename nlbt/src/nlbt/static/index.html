@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>nlbt — Local LLM Strategy Backtester</title>
+  <style>
+    :root { --bg:#0a0a0f; --fg:#e6e6ee; --muted:#6b6b80; --accent:#00d4aa; --card:#12121a; --border:#2a2a3a; --error:#ff5f5f; --ok:#00d4aa }
+    * { box-sizing:border-box }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); line-height:1.4 }
+    #app{max-width:960px;margin:2rem auto;padding:0 1rem}
+    h1 { font-size:1.8rem; margin-bottom:.5rem }
+    .subtitle { color:var(--muted); font-size:.9rem }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:1rem 0 }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap }
+    .input { flex:1; min-width:320px }
+    .input textarea { width:100%; min-height:80px; padding:.5rem; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--fg); font-family:inherit }
+    .btn { padding:.6rem 1rem; border:none; border-radius:4px; font-size:.85rem; font-weight:600; cursor:pointer; transition:background .2s }
+    .btn-primary { background:var(--accent); color:var(--bg) }
+    .btn-primary:hover { background:#00ffcc }
+    .btn-secondary { background:var(--border); color:var(--fg) }
+    .btn-secondary:hover { background:#3a3a4a }
+    .btn-disabled { opacity:.4; cursor:not-allowed }
+    .output { margin-top:1rem; padding:1rem; background:var(--card); border:1px solid var(--border); border-radius:4px; white-space:pre-wrap; display:none }
+    .output.ok { border-color:var(--ok); color:var(--ok) }
+    .output.error { border-color:var(--error); color:var(--error) }
+    .output.preview { color:var(--muted) }
+    .step { margin:.5rem 0; padding:.5rem 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border) }
+    .step:first-child { border-top:none }
+    .step:last-child { border-bottom:none }
+    .tag { display:inline-block; padding:.2rem .4rem; background:var(--border); border-radius:3px; font-size:.75rem; margin:.1rem }
+    .tag-ok { background:rgba(0,212,170,.15); color:var(--ok) }
+    .tag-error { background:rgba(255,95,95,.15); color:var(--error) }
+    .tag-clarification { background:rgba(255,181,51,.15); color:#ffb533 }
+    .tag-unsupported { background:rgba(150,150,150,.15); color:#969696 }
+    #statusOk { display:none }
+    #statusError { display:none }
+    #statusClarification { display:none }
+    #statusUnsupported { display:none }
+    #loading { display:none; align-self:center }
+    .muted { color:var(--muted) }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>nlbt</h1>
+  <div class="subtitle">Natural-language → validated JSON spec → deterministic backtest</div>
+
+  <!-- Step 1: Interpret -->
+  <div class="card" id="step1">
+    <h3>1. Interpret</h3>
+    <textarea id="prompt" placeholder="e.g. Buy SPY when 50-day SMA crosses above 200-day SMA, with 15% trailing stop" rows="3"></textarea>
+    <div class="row">
+      <button class="btn btn-primary" id="btnInterpret">Go</button>
+      <span class="muted" id="statusOk">status: ok</span>
+      <span class="muted" id="statusError" style="color:var(--error)">status: error</span>
+      <span class="muted" id="statusClarification" style="color:#ffb533">status: needs_clarification</span>
+      <span class="muted" id="statusUnsupported" style="color:#969696">status: unsupported</span>
+    </div>
+    <div id="interpretResult" class="output" style="display:none"></div>
+    <div id="loading" class="muted">Translating…</div>
+  </div>
+
+  <!-- Step 2: Confirm -->
+  <div class="card" id="step2" style="display:none">
+    <h3>2. Confirm rendering</h3>
+    <div id="confirmRender" class="preview"></div>
+    <button class="btn btn-secondary" id="btnConfirm">Confirm & Run</button>
+    <button class="btn btn-secondary" id="btnCancel">Cancel</button>
+  </div>
+
+  <!-- Step 3: Run -->
+  <div class="card" id="step3" style="display:none">
+    <h3>3. Running backtest</h3>
+    <div class="muted" id="runStatus"></div>
+  </div>
+
+  <!-- Step 4: Results -->
+  <div class="card" id="step4" style="display:none">
+    <h3>4. Results</h3>
+    <pre id="resultJson" class="output preview"></pre>
+    <div id="resultMetrics" class="metrics"></div>
+  </div>
+
+  <div class="muted" style="margin-top:1rem; font-size:.75rem">
+    Historical simulation only; not investment advice.
+  </div>
+</div>
+
+<script>
+  const API = location.pathname.startsWith('/ui') ? '/nlbt' : '/interpret';
+  // If deployed at root, API base is /nlbt; if under /ui, we use relative.
+
+  async function $(s) { return document.querySelector(s) }
+  async function hide(s) { $(s).style.display='none' }
+  async function show(s) { $(s).style.display='' }
+  async function addClass(s,c) { $(s).classList.add(c) }
+  async function remClass(s,c) { $(s).classList.remove(c) }
+
+  async function setStatus(status) {
+    remClass('#step1','ok error clarification unsupported');
+    switch(status) {
+      case 'ok':      addClass('#step1','ok');      show('#statusOk');      hide('#statusError'); hide('#statusClarification'); hide('#statusUnsupported'); break;
+      case 'error':   addClass('#step1','error');   show('#statusError');   hide('#statusOk');      hide('#statusClarification'); hide('#statusUnsupported'); break;
+      case 'clarification': addClass('#step1','clarification'); show('#statusClarification'); hide('#statusOk'); hide('#statusError'); hide('#statusUnsupported'); break;
+      case 'unsupported': addClass('#step1','unsupported'); show('#statusUnsupported'); hide('#statusOk'); hide('#statusError'); hide('#statusClarification'); break;
+    }
+  }
+
+  async function api(path, body) {
+    const resp = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${txt}`);
+    }
+    return resp.json();
+  }
+
+  // Step 1: Interpret
+  async function interpret() {
+    const prompt = $('#prompt').value.trim();
+    if (!prompt) return alert('Enter a prompt');
+    show('#loading'); addClass('#btnInterpret','btn-disabled');
+    try {
+      const data = await api('/interpret', { text: prompt });
+      remClass('#btnInterpret','btn-disabled');
+      setStatus(data.status);
+      $('#interpretResult').textContent = JSON.stringify(data, null, 2);
+      $('#interpretResult').classList.add(`output ${data.status}`);
+      show('#interpretResult');
+
+      // Show/hide steps based on status
+      if (data.status === 'ok') {
+        hide('#step2'); hide('#step3'); hide('#step4');
+        show('#step2'); // show confirmation step
+        $('#confirmRender.textContent = data.rendering;
+      } else if (data.status === 'needs_clarification') {
+        // Show questions
+        const qList = data.questions.map(q => `- [${q.id}] ${q.question}`).join('\n');
+        alert('Need clarification:\n' + qList);
+        setStatus('needs_clarification');
+      } else if (data.status === 'unsupported') {
+        const uList = data.unsupported.map(u => '- ' + u).join('\n');
+        alert('Unsupported features:\n' + uList);
+        setStatus('unsupported');
+      } else {
+        setStatus('error');
+      }
+    } catch (e) {
+      remClass('#btnInterpret','btn-disabled');
+      alert('Error: ' + e.message);
+      setStatus('error');
+    } finally {
+      hide('#loading');
+    }
+  }
+
+  // Step 2: Confirm
+  async function confirmRun() {
+    const specHashLogic = $('#specLogic').value;
+    const specHashFull = $('#specFull').value;
+    if (!specHashLogic || !specHashFull) return alert('Missing spec hashes');
+
+    show('#step3');
+    try {
+      const data = await api('/confirm', {
+        spec_hash_logic: specHashLogic,
+        spec_hash_full: specHashFull
+      });
+      // Move to run step
+      hide('#step2'); show('#step3');
+      $('#runStatus.textContent = 'Running backtest…';
+    } catch (e) {
+      remClass('#btnConfirm','btn-disabled');
+      alert('Confirm error: ' + e.message);
+      hide('#step3');
+      show('#step2');
+    }
+  }
+
+  // Step 3: Run → get result
+  async function runIt() {
+    // The UI collects the interp+confirmation from step1+step2
+    // We'll re-interpret and confirm in one go via /run with the original prompt
+    // but first let's just collect what we have and call /run
+    const prompt = $('#prompt').value.trim();
+    if (!prompt) return alert('Enter a prompt');
+
+    show('#step3'); $('#runStatus.textContent = 'Running backtest…';
+    try {
+      // Direct /run with the prompt - the server will interpret+confirm+run
+      const data = await api('/run', { text: prompt });
+      $('#runStatus.textContent = '';
+      $('#resultJson.textContent = data.result_json;
+      show('#resultJson');
+      $('#resultMetrics.innerHTML = '';
+      for (const [k,v] of Object.entries(data.metrics||{})) {
+        $('#resultMetrics.innerHTML += `<div><span class="muted">${k}:</span> <span>${typeof v==='number'?v.toFixed(4):v}</span></div>`;
+      }
+      show('#step4');
+    } catch (e) {
+      alert('Run error: ' + e.message);
+      hide('#step3');
+    }
+  }
+
+  // Events
+  $('#btnInterpret').onclick = interpret;
+  $('#btnConfirm').onclick = confirmRun;
+  $('#btnCancel').onclick = () => { hide('#step2'); show('#step1'); };
+  $('#btnRunContinue').onclick = runIt; // will add later
+
+  // Initial load: show step1, hide rest
+  hide('#step2'); hide('#step3'); hide('#step4');
+</script>
+</body>
+</html>

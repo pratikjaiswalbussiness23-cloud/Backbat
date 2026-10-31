@@ -168,8 +168,8 @@ def test_honesty_bar_has_provenance_costs_trade_count_and_disclaimer() -> None:
 
 
 def test_demo_fixtures_have_unique_matching_cases() -> None:
-    assert len(DEMO_CASES) == 5
-    assert len({case.prompt for case in DEMO_CASES}) == 5
+    assert len(DEMO_CASES) == 9
+    assert len({case.prompt for case in DEMO_CASES}) == 9
     assert CSV_PATH.is_file()
 
 

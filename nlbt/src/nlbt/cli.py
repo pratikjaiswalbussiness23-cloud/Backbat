@@ -509,3 +509,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             traceback.print_exc()
         return 1
     return outcome if isinstance(outcome, int) else 0
+
+
+# --------------------------------------------------------------------- serve (P7-T3, ADR-0006)
+
+
+@_APP.command("serve")
+def _serve_cli(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host (default 127.0.0.1)"),
+    port: int = typer.Option(8000, "--port", help="Port (default 8000)"),
+    reload: bool = typer.Option(False, "--reload", help="Reload on change (dev only)"),
+) -> None:
+    """Run the nlbt self-hosted local web server.
+
+    Serves the static UI at ``/ui`` and provides API endpoints
+    ``/interpret`` / ``/confirm`` / ``/run`` so anyone can deploy
+    nlbt on their own laptop without Streamlit.
+
+    ``uv run nlbt serve`` or ``python -m nlbt server``
+    """
+    from nlbt.server import main as _server_main
+    raise SystemExit(_server_main(argv=["--host", host, "--port", str(port), "--reload"] if reload else ["--host", host, "--port", str(port)]))
