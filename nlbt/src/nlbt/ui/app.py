@@ -386,7 +386,16 @@ def main() -> None:
             st.json(interpretation.unsupported)
         if controller.state.spec is not None:
             st.markdown("**Deterministic strategy rendering**")
-            st.code(controller.state.rendering, language="text")
+            shown = controller.state.rendering or ""
+            if not shown and controller.state.spec is not None:
+                try:
+                    from nlbt.spec.render import render_spec
+
+                    shown = render_spec(controller.state.spec)
+                except Exception as exc:
+                    st.error(f"Could not render the spec text: {exc}")
+                    shown = ""
+            st.code(shown, language="text")
         if interpretation.assumptions:
             st.markdown("**Assumptions**")
             st.json(interpretation.assumptions)

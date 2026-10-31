@@ -32,6 +32,7 @@ from nlbt.nl.envelope import Envelope
 from nlbt.nl.prompt import ASSUMPTION_FIELDS, PROMPT_VERSION, build_system_prompt
 from nlbt.spec.defaults import DEFAULTS, MUST_ASK, resolve_date_range
 from nlbt.spec.models import Assumption, StrategySpec
+from nlbt.spec.render import render_spec
 from nlbt.spec.validate import validate_spec
 
 __all__ = [
@@ -94,6 +95,7 @@ class ParseResult:
     assumptions: list[Assumption] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
     period_expression: PeriodExpression | None = None
+    rendering: str = ""
     llm_model: str = ""
     prompt_version: str = PROMPT_VERSION
     llm_source: str = "recorded"
@@ -523,11 +525,13 @@ def parse_text(
         }
         if status == "ok":
             spec = StrategySpec.model_validate(sanitized["spec"])
+            rendering = render_spec(spec)
             return ParseResult(
                 status="ok",
                 spec=spec,
                 assumptions=[Assumption(**a) for a in sanitized["assumptions"]],
                 **common,
+                rendering=rendering,
             )
         if status == "needs_clarification":
             return ParseResult(status="needs_clarification", questions=questions or [], **common)

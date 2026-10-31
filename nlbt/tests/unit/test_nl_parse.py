@@ -217,6 +217,28 @@ def test_status_ok_discloses_registry_defaults(tmp_path: Path) -> None:
     assert result.unsupported == []
 
 
+def test_status_ok_carries_the_rendered_confirmation_text(tmp_path: Path) -> None:
+    """``ParseResult.rendering`` is ``render_spec()`` of the spec just validated.
+
+    Single render (C7): ``nlbt.nl.service.interpret`` passes this exact string
+    through as ``Interpretation.rendering`` instead of rendering the same spec
+    a second time, so the confirmation gate text can never drift between the
+    parser and the service.
+    """
+    user = build_user_message(TEXT)
+    write_fixture(
+        tmp_path, name="ok_render", user=user, payload={"status": "ok", "spec": ok_spec()}
+    )
+    client = recording_client(tmp_path)
+
+    result = parse_text(TEXT, client=client, today=FIXED_TODAY)
+
+    assert result.status == "ok"
+    assert result.spec is not None
+    assert result.rendering == render_spec(result.spec)
+    assert result.rendering.startswith(f"=== STRATEGY: {result.spec.name} ===")
+
+
 def test_missing_period_capital_and_sizing_filled_from_defaults(tmp_path: Path) -> None:
     text = "Buy SPY when close is above 100."
     payload = {"status": "ok", "spec": ok_spec()}

@@ -57,7 +57,6 @@ from nlbt.nl.parse import parse_text
 from nlbt.results import RunResult, execute_run
 from nlbt.spec.canonical import spec_hash_full, spec_hash_logic
 from nlbt.spec.models import StrategySpec
-from nlbt.spec.render import render_spec
 from nlbt.spec.validate import validate_spec
 
 __all__ = [
@@ -236,7 +235,9 @@ def interpret(
     return Interpretation(
         status="ok",
         spec=spec,
-        rendering=render_spec(spec),
+        # ``parse_text`` already rendered the spec it validated (single
+        # render, C7): reuse that exact text instead of rendering twice.
+        rendering=parsed.rendering,
         assumptions=assumptions,
         warnings=list(validation.warnings),
         unsupported=list(parsed.unsupported),
