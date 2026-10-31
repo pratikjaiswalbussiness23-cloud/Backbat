@@ -79,17 +79,43 @@ uv sync
 pip install -e .
 ```
 
-### 3. API Key Setup (Optional for Live LLM)
-Create a `.env` file in the `nlbt/` root:
+### 3. API Key Setup & Customization 🔑
+
+`nlbt` gives users complete flexibility over LLM providers. You can use your own **NVIDIA NIM key**, swap to **OpenAI / Groq / DeepSeek / Ollama**, or run **100% offline** without any key.
+
+#### A. Using Your Own NVIDIA NIM Key (Recommended & Free)
+1. Get a free API key with 1,000 free credits at [build.nvidia.com](https://build.nvidia.com).
+2. Create or edit `nlbt/.env`:
+   ```bash
+   NVIDIA_API_KEY=nvapi-your-personal-key-here
+   ```
+   *(Default model: `minimaxai/minimax-m3.1-flash` on NVIDIA NIM)*
+
+#### B. Swapping to Other Providers (OpenAI, Groq, Ollama, DeepSeek)
+Because `nlbt` uses a provider-neutral OpenAI-compatible transport, you can point it to **any provider** by configuring `NLBT_LLM_BASE_URL` and `NLBT_LLM_MODEL` in your `.env`:
 
 ```bash
-NVIDIA_API_KEY=nvapi-your-key-here
-# Optional overrides:
-NLBT_LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-NLBT_LLM_MODEL=meta/llama-3.1-70b-instruct
+# ── Example 1: Groq (Ultra-fast) ──
+NVIDIA_API_KEY=gsk_your_groq_api_key
+NLBT_LLM_BASE_URL=https://api.groq.com/openai/v1
+NLBT_LLM_MODEL=llama-3.3-70b-versatile
+
+# ── Example 2: OpenAI ──
+NVIDIA_API_KEY=sk-your-openai-api-key
+NLBT_LLM_BASE_URL=https://api.openai.com/v1
+NLBT_LLM_MODEL=gpt-4o-mini
+
+# ── Example 3: Local Ollama (100% Private, Free, No Internet) ──
+NVIDIA_API_KEY=ollama
+NLBT_LLM_BASE_URL=http://localhost:11434/v1
+NLBT_LLM_MODEL=llama3.1:8b
 ```
 
-> **Tip:** You do not need an API key to test! Use **Offline Demo Mode** out-of-the-box.
+#### C. Zero Key Mode (Offline Demo & JSON Runs)
+- **Offline Recorded Demos:** Run with `NLBT_LLM_DEMO=1` to test the full pipeline using pre-recorded golden translations without network calls.
+- **Direct Specs:** Use `nlbt run <spec.json>` to execute any trading strategy with 0 LLM calls.
+
+> 🔒 **Security Guarantee:** API keys are read strictly into local memory. They are **never** committed to git, never logged, and all key-like tokens are automatically redacted from error tracebacks.
 
 ---
 
