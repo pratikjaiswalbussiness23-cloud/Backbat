@@ -45,7 +45,10 @@ def test_defaults_with_no_env_vars_set() -> None:
     """No §3.5 var set → every field equals the ROADMAP §3.5/task default."""
     cfg = Config()
     assert cfg.anthropic_api_key is None
-    assert cfg.llm_model == "claude-3-5-sonnet-20241022"
+    # OQ-0001 RESOLVED (owner-authorized 2026-10-31): the task-mandated
+    # claude-3-5-sonnet-20241022 id is retired and 404'd on every live NIM
+    # call; default swapped for an account-enabled, non-reasoning model.
+    assert cfg.llm_model == "minimaxai/minimax-m3.1-flash"
     assert cfg.data_cache_dir == ".cache/nlbt"
     assert cfg.db_path == "nlbt.db"
     assert cfg.log_level == "INFO"

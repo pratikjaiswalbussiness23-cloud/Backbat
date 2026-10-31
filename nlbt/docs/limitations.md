@@ -109,9 +109,12 @@ See also [`demo_script.md`](demo_script.md) for the offline demo setup.
 
 ### Related smaller open items (see `OPEN_QUESTIONS.md` for the full list)
 
-- **OQ-0001:** the `NLBT_LLM_MODEL` *default* is the retired
-  `claude-3-5-sonnet-20241022` id (mandated by the original task text); a
-  working NIM model id must be supplied via `NLBT_LLM_MODEL`.
+- **OQ-0001 (resolved 2026-10-31):** the `NLBT_LLM_MODEL` *default* is now
+  `minimaxai/minimax-m3.1-flash` (owner-authorized). The original task-mandated
+  `claude-3-5-sonnet-20241022` id is retired and returned **404 on every live
+  call**, which made all non-demo prompts fail with `E_NL_LLM`; the probe trail
+  is in `verified_apis.md`. Override with `NLBT_LLM_MODEL=<id>` if the endpoint's
+  account-gated model set changes again.
 - **OQ-0085:** the NL input cap is 4,000 characters (`E_LIMIT_EXCEEDED`).
 - **OQ-0089:** the "stop mentioned without a number" must-ask gate is a
   deterministic keyword heuristic and can produce false positives.

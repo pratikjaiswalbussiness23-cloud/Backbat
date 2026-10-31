@@ -58,9 +58,11 @@ class Config(BaseSettings):
         validation_alias="ANTHROPIC_API_KEY",
     )  # optional until the LLM is used
     llm_model: str = Field(
-        default="claude-3-5-sonnet-20241022",
+        default="minimaxai/minimax-m3.1-flash",
         validation_alias="NLBT_LLM_MODEL",
-    )  # real ID but retired; see OQ-0001
+    )  # live NIM id verified 2026-10-31 (OQ-0001 resolved): account-enabled,
+    # non-reasoning, accepts response_format json_schema. The retired
+    # claude-3-5-sonnet-20241022 default returned 404 on every live call.
     # P6-T1 (owner ruling 2026-10-25): provider-neutral OpenAI-compatible client.
     nvidia_api_key: str | None = Field(
         default=None,
